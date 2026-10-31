@@ -1,0 +1,25 @@
+-- SMART CONTRACTOR MATCHING | 03
+create index if not exists profiles_role_idx on public.profiles(role);
+create index if not exists contractor_profiles_verification_active_idx on public.contractor_profiles(verification_status, is_active);
+create index if not exists contractor_profiles_service_cities_gin_idx on public.contractor_profiles using gin(service_cities);
+create index if not exists contractor_documents_contractor_status_idx on public.contractor_documents(contractor_id, status);
+create index if not exists portfolio_items_contractor_idx on public.portfolio_items(contractor_id);
+create index if not exists portfolio_images_item_sort_idx on public.portfolio_images(portfolio_item_id, sort_order);
+create index if not exists estimate_rates_lookup_idx on public.estimate_rates(finish_level, work_type, is_active, effective_from desc);
+create index if not exists projects_homeowner_created_idx on public.projects(homeowner_id, created_at desc);
+create index if not exists projects_status_city_idx on public.projects(status, city);
+create index if not exists project_matches_project_score_idx on public.project_matches(project_id, match_score desc);
+create index if not exists quotes_project_status_idx on public.quotes(project_id, status);
+create index if not exists quotes_contractor_status_idx on public.quotes(contractor_id, status);
+create unique index if not exists quotes_one_accepted_per_project_idx on public.quotes(project_id) where status = 'accepted';
+create index if not exists milestones_project_seq_idx on public.milestones(project_id, seq);
+create index if not exists milestones_status_approve_by_idx on public.milestones(status, approve_by);
+create index if not exists milestone_proofs_milestone_created_idx on public.milestone_proofs(milestone_id, created_at desc);
+create index if not exists payments_project_status_idx on public.payments(project_id, status);
+create index if not exists escrow_ledger_project_created_idx on public.escrow_ledger(project_id, created_at);
+create index if not exists payouts_contractor_status_idx on public.payouts(contractor_id, status);
+create index if not exists disputes_status_created_idx on public.disputes(status, created_at);
+create index if not exists dispute_messages_dispute_created_idx on public.dispute_messages(dispute_id, created_at);
+create index if not exists reviews_contractor_created_idx on public.reviews(contractor_id, created_at desc);
+create index if not exists notifications_user_unread_idx on public.notifications(user_id, created_at desc) where read_at is null;
+create index if not exists audit_log_entity_idx on public.audit_log(entity, entity_id, created_at desc);
