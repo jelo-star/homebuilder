@@ -34,6 +34,25 @@ type ProjectIdsPage = {
   error: { message: string } | null;
 };
 
+type ProjectListRow = Project & {
+  awardedQuote?: (Quote & { contractor_profile: ContractorProfile | null }) | null;
+  proposalQuotes?: Array<Quote & { contractor_profile: ContractorProfile | null }>;
+  contractor?: ContractorProfile | null;
+  contractorQuoteAmount?: number | null;
+  platformCommissionAmount?: number;
+  commissionPercent?: number;
+  agreedAmount?: number | null;
+  moneyReleased?: number;
+  moneyInEscrow?: number;
+  remainingBalance?: number | null;
+  completionPercentage?: number;
+  displayStatus?: string;
+  currentMilestone?: Milestone | null;
+  milestones?: Milestone[];
+  transactions?: Array<Record<string, unknown>>;
+  isBuildActive?: boolean;
+};
+
 async function fetchAllProjectIds(
   createQuery: (from: number, to: number) => PromiseLike<ProjectIdsPage>
 ) {
@@ -50,12 +69,12 @@ async function fetchAllProjectIds(
 export default function HomeownerProjectsPage() {
   const { showToast } = useToast();
   const [loading, setLoading] = React.useState(true);
-  const [projects, setProjects] = React.useState<any[]>([]);
+  const [projects, setProjects] = React.useState<ProjectListRow[]>([]);
   const [filter, setFilter] = React.useState<'projects' | 'active' | 'quotes' | 'completed'>('projects');
   const [search, setSearch] = React.useState('');
   const [page, setPage] = React.useState(0);
   const [totalCount, setTotalCount] = React.useState(0);
-  const [projectToDelete, setProjectToDelete] = React.useState<any | null>(null);
+  const [projectToDelete, setProjectToDelete] = React.useState<ProjectListRow | null>(null);
   const [isDeleting, setIsDeleting] = React.useState(false);
   const [loadError, setLoadError] = React.useState('');
   const loadRequestId = React.useRef(0);
@@ -295,12 +314,10 @@ export default function HomeownerProjectsPage() {
 
       // 1. Agreed Cost (or System Baseline Estimate if not awarded)
       const contractorQuoteAmount = Number(awardedQuote?.price) || null;
-      const commissionPercent = Number(p.platform_commission_percent ?? 0);
-      const platformCommissionAmount = awardedQuote
-        ? Number(p.platform_commission_amount ?? Math.round((Number(awardedQuote.price) * commissionPercent / 100 + Number.EPSILON) * 100) / 100)
-        : 0;
+      const commissionPercent = 0;
+      const platformCommissionAmount = 0;
       const agreedAmount = awardedQuote
-        ? Number(p.homeowner_total_amount || Number(awardedQuote.price) + platformCommissionAmount)
+        ? Number(p.homeowner_total_amount ?? Number(awardedQuote.price))
         : sysEstMid || null;
 
       // 2. Money Released (sum of paid milestones)

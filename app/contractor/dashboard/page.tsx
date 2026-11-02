@@ -4,26 +4,14 @@ import React from 'react';
 import Link from 'next/link';
 import AppLayout from '@/components/ui/AppLayout';
 import {
-  Briefcase,
-  ShieldCheck,
   FileText,
-  Clock,
-  DollarSign,
-  Plus,
   ChevronRight,
-  AlertCircle,
-  CheckCircle2,
   Building2,
-  MapPin,
-  Calendar,
   HardHat,
-  Send,
-  Eye,
-  ArrowRight
 } from 'lucide-react';
 import { createClient } from '@/lib/supabase/client';
 import { ContractorProfile, MilestoneStatus, Project, Quote, Profile } from '@/types/database';
-import { formatCurrency, formatDate, capitalize } from '@/lib/utils/formatters';
+import { formatCurrency } from '@/lib/utils/formatters';
 
 interface EnrichedActiveProject extends Project {
   homeowner_name: string;
@@ -68,11 +56,10 @@ function getErrorMessage(error: unknown): string {
 }
 
 export default function ContractorDashboard() {
-  const [loading, setLoading] = React.useState(true);
   const [loadError, setLoadError] = React.useState('');
   const [contractor, setContractor] = React.useState<ContractorProfile | null>(null);
   const [activeProjects, setActiveProjects] = React.useState<EnrichedActiveProject[]>([]);
-  const [unawardedProjects, setUnawardedProjects] = React.useState<EnrichedUnawardedProject[]>([]);
+  const [, setUnawardedProjects] = React.useState<EnrichedUnawardedProject[]>([]);
   const [stats, setStats] = React.useState({
     opportunitiesCount: 0,
     submittedQuotesCount: 0,
@@ -227,7 +214,6 @@ export default function ContractorDashboard() {
       } catch (error) {
         setLoadError(getErrorMessage(error));
       } finally {
-        setLoading(false);
       }
     }
 
@@ -239,13 +225,13 @@ export default function ContractorDashboard() {
       userRole="contractor"
       userName={contractor?.business_name || 'Contractor'}
       title="Contractor Dashboard"
-      subtitle="Manage active construction contracts and review unawarded project opportunities"
+      subtitle="Manage active construction contracts and review available projects"
       showBackButton={false}
     >
       <div className="w-full space-y-8 pb-12">
         {loadError && <div className="p-3 rounded-xl bg-red-50 border border-red-200 text-red-700 text-xs">{loadError}</div>}
         {/* Status Summary Cards */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
           <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-xs">
             <div className="flex items-center justify-between text-slate-500 text-xs font-medium">
               <span>Active Projects</span>
@@ -257,11 +243,11 @@ export default function ContractorDashboard() {
 
           <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-xs">
             <div className="flex items-center justify-between text-slate-500 text-xs font-medium">
-              <span>Unawarded Opportunities</span>
+              <span>Available Projects</span>
               <Building2 className="w-4 h-4 text-blue-600" />
             </div>
             <div className="text-2xl font-bold text-slate-900 mt-2">{stats.opportunitiesCount}</div>
-            <div className="text-xs text-slate-400 mt-1">Accepting quotations</div>
+            <div className="text-xs text-slate-400 mt-1">Open to quotes</div>
           </div>
 
           <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-xs">
@@ -271,15 +257,6 @@ export default function ContractorDashboard() {
             </div>
             <div className="text-2xl font-bold text-slate-900 mt-2">{stats.submittedQuotesCount}</div>
             <div className="text-xs text-slate-400 mt-1">Pending homeowner decision</div>
-          </div>
-
-          <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-xs">
-            <div className="flex items-center justify-between text-slate-500 text-xs font-medium">
-              <span>Trust Rating</span>
-              <ShieldCheck className="w-4 h-4 text-purple-600" />
-            </div>
-            <div className="text-2xl font-bold text-slate-900 mt-2">5.0 ★</div>
-            <div className="text-xs text-slate-400 mt-1">Verified Licensed Builder</div>
           </div>
         </div>
 

@@ -22,8 +22,6 @@ import {
   FileSpreadsheet,
   Layers,
   HardHat,
-  ExternalLink,
-  ChevronRight,
   Sparkles,
   Phone,
   Mail,
@@ -31,12 +29,9 @@ import {
   Check,
   Copy,
   Receipt,
-  ShieldAlert,
   Scale,
   MessageSquare,
-  FileText,
   FolderKanban,
-  Plus,
   Lock,
   ChevronDown,
   ChevronUp,
@@ -705,13 +700,11 @@ function ProjectDetailsContent() {
   }, [project?.est_mid, project?.budget, systemEstimate]);
 
   const agreedCost = isContractAccepted ? Number(awardedQuote?.price || 0) : 0;
-  const projectCommissionPercent = Number(project?.platform_commission_percent ?? 0);
-  const calculatedCommission = Math.round((agreedCost * projectCommissionPercent / 100 + Number.EPSILON) * 100) / 100;
-  const platformCommissionAmount = isContractAccepted
-    ? Number(project?.platform_commission_amount ?? calculatedCommission)
-    : 0;
+  const projectCommissionPercent = 0;
+  const calculatedCommission = 0;
+  const platformCommissionAmount = 0;
   const homeownerTotalAmount = isContractAccepted
-    ? Number(project?.homeowner_total_amount || agreedCost + platformCommissionAmount)
+    ? Number(project?.homeowner_total_amount ?? agreedCost)
     : systemEstimatedCost;
   const displayCostAmount = homeownerTotalAmount;
   const totalContractAmount = displayCostAmount ?? 0;
@@ -928,13 +921,12 @@ function ProjectDetailsContent() {
       const { error } = await supabase.rpc('phase_one_accept_quote', { p_quote_id: targetQuote.id });
       if (error) throw error;
 
-      const commissionAmount = Math.round((agreedPrice * projectCommissionPercent / 100 + Number.EPSILON) * 100) / 100;
-      const totalAmount = agreedPrice + commissionAmount;
+      const totalAmount = agreedPrice;
       setProject(prev => prev ? {
         ...prev,
         awarded_quote_id: targetQuote.id,
         status: 'project_planning',
-        platform_commission_amount: commissionAmount,
+        platform_commission_amount: 0,
         homeowner_total_amount: totalAmount,
       } : prev);
       setQuotes(prev => prev.map(q => q.id === targetQuote.id ? { ...q, status: 'accepted' as any } : { ...q, status: 'declined' as any }));
@@ -943,7 +935,7 @@ function ProjectDetailsContent() {
       setIsComparisonOpen(false);
 
       const contractorName = targetQuote.contractor_profile?.business_name || 'the selected contractor';
-      const successToast = `Proposal accepted. Your total project cost is ${formatCurrency(totalAmount)}.`;
+      const successToast = `Proposal accepted. The agreed project cost is ${formatCurrency(totalAmount)}.`;
       setSuccessMsg(successToast);
       showToast(successToast, 'success', 'Proposal Accepted — Project Planning Phase');
     } catch (err: unknown) {
@@ -1922,12 +1914,9 @@ function ProjectDetailsContent() {
                                         <strong>{formatCurrency(Number(q.price))}</strong>
                                       </div>
                                       <div className="flex justify-between gap-2 text-slate-600">
-                                        <span>Platform commission ({projectCommissionPercent}%)</span>
-                                        <strong>{formatCurrency(Math.round((Number(q.price) * projectCommissionPercent / 100 + Number.EPSILON) * 100) / 100)}</strong>
                                       </div>
                                       <div className="flex justify-between gap-2 border-t border-emerald-100 pt-1 font-bold text-emerald-900">
                                         <span>Total payable if accepted</span>
-                                        <strong>{formatCurrency(Number(q.price) + Math.round((Number(q.price) * projectCommissionPercent / 100 + Number.EPSILON) * 100) / 100)}</strong>
                                       </div>
                                     </div>
                                   )}
@@ -2125,11 +2114,6 @@ function ProjectDetailsContent() {
                                   <td className="py-3 px-3 text-slate-600">{m.description || 'Stage execution works'}</td>
                                   <td className="py-3 px-3 font-mono font-bold text-slate-900">
                                     {formatCurrency(m.homeowner_total_amount ?? m.amount)}
-                                    {Number(m.platform_commission_amount ?? 0) > 0 && (
-                                      <span className="mt-1 block font-sans text-[10px] font-normal text-slate-500">
-                                        Includes {formatCurrency(m.platform_commission_amount ?? 0)} commission
-                                      </span>
-                                    )}
                                   </td>
                                   <td className="py-3 px-3 text-slate-600">{m.start_date ? formatDate(m.start_date) : '—'}</td>
                                   <td className="py-3 px-3 text-slate-600">{m.end_date ? formatDate(m.end_date) : '—'}</td>
@@ -2218,7 +2202,7 @@ function ProjectDetailsContent() {
                           <h4 className="font-bold text-slate-900 text-base">Contractor Milestone Schedule in Formulation</h4>
                         </div>
                         <p className="text-xs text-slate-600 max-w-lg mx-auto leading-relaxed">
-                          Contractor <strong className="text-slate-900">{contractor?.business_name || 'Assigned Builder'}</strong> accepted your proposal. Your total project cost is <strong className="text-slate-900 font-mono">{formatCurrency(homeownerTotalAmount)}</strong>. The contractor is currently drafting the construction phase deliverables, target dates, and milestone payment schedule.
+                          Contractor <strong className="text-slate-900">{contractor?.business_name || 'Assigned Builder'}</strong> accepted your proposal. The agreed project cost is <strong className="text-slate-900 font-mono">{formatCurrency(homeownerTotalAmount)}</strong>. The contractor is currently drafting the construction phase deliverables, target dates, and milestone payment schedule.
                         </p>
                         <div className="max-w-md mx-auto p-4 bg-white rounded-xl border border-indigo-100 text-left text-xs text-indigo-950 space-y-2.5 shadow-2xs">
                           <div className="font-bold flex items-center gap-1.5 text-indigo-900">
