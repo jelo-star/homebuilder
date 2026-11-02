@@ -3769,34 +3769,12 @@ function ProjectDetailsContent() {
                   items = [];
                 }
 
-                const materialsTotal = mq?.materials_subtotal !== undefined
-                  ? Number(mq.materials_subtotal)
-                  : items.filter(it => it.category === 'Material').reduce((sum, it) => sum + Number(it.line_total || 0), 0);
-                const laborEquipTotal = mq?.operations_subtotal !== undefined
-                  ? Number(mq.operations_subtotal)
-                  : items.filter(it => it.category !== 'Material').reduce((sum, it) => sum + Number(it.line_total || 0), 0);
-                const totalBOQ = viewingMaterialQuote?.price ? Number(viewingMaterialQuote.price) : (materialsTotal + laborEquipTotal);
+                const totalBOQ = viewingMaterialQuote?.price
+                  ? Number(viewingMaterialQuote.price)
+                  : items.reduce((sum, item) => sum + Number(item.line_total || 0), 0);
 
                 return (
                   <>
-                    <div className="grid shrink-0 grid-cols-1 gap-3 text-xs md:grid-cols-3">
-                      <div className="p-3.5 rounded-xl bg-slate-50 border border-slate-200">
-                        <span className="text-[10px] text-slate-500 uppercase font-bold block">Materials Scope Total</span>
-                        <span className="text-base font-extrabold font-mono text-slate-900 mt-0.5 block">{formatCurrency(materialsTotal)}</span>
-                        <span className="text-[10px] text-slate-400">Cement, steel, aggregates, pipes & tiles</span>
-                      </div>
-                      <div className="p-3.5 rounded-xl bg-slate-50 border border-slate-200">
-                        <span className="text-[10px] text-slate-500 uppercase font-bold block">Labor & Equipment Total</span>
-                        <span className="text-base font-extrabold font-mono text-slate-900 mt-0.5 block">{formatCurrency(laborEquipTotal)}</span>
-                        <span className="text-[10px] text-slate-400">Foremen, rebarmen, masons & mixers</span>
-                      </div>
-                      <div className="p-3.5 rounded-xl bg-emerald-50 border border-emerald-200">
-                        <span className="text-[10px] text-emerald-800 uppercase font-bold block">Grand Quotation Total</span>
-                        <span className="text-base font-extrabold font-mono text-emerald-700 mt-0.5 block">{formatCurrency(totalBOQ)}</span>
-                        <span className="text-[10px] text-emerald-700/80">{items.length} verified itemized line items</span>
-                      </div>
-                    </div>
-
                     <div className="hidden min-h-0 flex-1 overflow-auto rounded-2xl border border-slate-200 shadow-2xs md:block">
                       <table className="w-full text-left text-xs">
                         <thead className="bg-slate-50 border-b border-slate-200 text-[11px] font-bold text-slate-600 uppercase tracking-wider sticky top-0 z-10">
@@ -3866,14 +3844,15 @@ function ProjectDetailsContent() {
                         </p>
                       )}
                     </div>
+                    <div className="flex shrink-0 items-center justify-between gap-3 border-t-2 border-slate-800 pt-3">
+                      <span className="text-sm font-bold text-slate-900">Total</span>
+                      <span className="text-lg font-extrabold text-emerald-700">{formatCurrency(totalBOQ)}</span>
+                    </div>
                   </>
                 );
               })()}
 
-              <div className="flex shrink-0 flex-col items-stretch justify-between gap-3 border-t border-slate-100 pt-3 sm:flex-row sm:items-center">
-                <span className="min-w-0 text-[11px] leading-relaxed text-slate-400">
-                  Included automatically in the multi-sheet Excel export (.xlsx)
-                </span>
+              <div className="flex shrink-0 justify-end border-t border-slate-100 pt-3">
                 <button
                   type="button"
                   onClick={() => setViewingMaterialQuote(null)}
