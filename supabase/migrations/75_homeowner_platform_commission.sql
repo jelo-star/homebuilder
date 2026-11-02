@@ -74,10 +74,8 @@ begin
         raise exception 'The awarded quote must be accepted and belong to this project';
       end if;
 
-      new.platform_commission_amount :=
-        round(v_quote_price * new.platform_commission_percent / 100, 2);
-      new.homeowner_total_amount :=
-        v_quote_price + new.platform_commission_amount;
+      new.platform_commission_amount := 0;
+      new.homeowner_total_amount := v_quote_price;
     end if;
   end if;
 
@@ -104,10 +102,8 @@ begin
     raise exception 'Project not found for milestone commission calculation';
   end if;
 
-  new.platform_commission_amount :=
-    round(new.amount * v_commission_percent / 100, 2);
-  new.homeowner_total_amount :=
-    new.amount + new.platform_commission_amount;
+  new.platform_commission_amount := 0;
+  new.homeowner_total_amount := new.amount;
 
   return new;
 end;
@@ -118,15 +114,15 @@ update public.projects p
  where p.platform_commission_percent = 0;
 
 update public.projects p
-   set platform_commission_amount = round(q.price * p.platform_commission_percent / 100, 2),
-       homeowner_total_amount = q.price + round(q.price * p.platform_commission_percent / 100, 2)
+   set platform_commission_amount = 0,
+       homeowner_total_amount = q.price
   from public.quotes q
  where p.awarded_quote_id = q.id
    and q.status = 'accepted';
 
 update public.milestones m
-   set platform_commission_amount = round(m.amount * p.platform_commission_percent / 100, 2),
-       homeowner_total_amount = m.amount + round(m.amount * p.platform_commission_percent / 100, 2)
+   set platform_commission_amount = 0,
+       homeowner_total_amount = m.amount
   from public.projects p
  where p.id = m.project_id;
 

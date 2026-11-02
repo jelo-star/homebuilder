@@ -377,17 +377,17 @@ function ContractorProjectPaymentsContent() {
   }
 
   const projectRef = `PRJ-${project.id.slice(-6).toUpperCase()}`;
-  const contractAmount = awardedQuote?.price || project.budget || 0;
-  const totalAllocated = milestones.reduce((sum, m) => sum + Number(m.amount), 0);
+  const contractAmount = Number(project.homeowner_total_amount ?? awardedQuote?.price ?? project.budget ?? 0);
+  const totalAllocated = milestones.reduce((sum, m) => sum + Number(m.homeowner_total_amount ?? m.amount ?? 0), 0);
 
   // Financial Balances
   const releasedFunds = milestones
     .filter(m => m.status === 'paid')
-    .reduce((sum, m) => sum + Number(m.amount), 0);
+    .reduce((sum, m) => sum + Number(m.homeowner_total_amount ?? m.amount ?? 0), 0);
 
   const awaitingRelease = milestones
     .filter(m => m.status === 'approved')
-    .reduce((sum, m) => sum + Number(m.amount), 0);
+    .reduce((sum, m) => sum + Number(m.homeowner_total_amount ?? m.amount ?? 0), 0);
 
   const remainingBalance = Math.max(0, contractAmount - releasedFunds);
   return (

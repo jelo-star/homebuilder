@@ -88,18 +88,6 @@ export default function MilestoneReleasesPage() {
       });
       if (ledgerError) throw ledgerError;
 
-      const commissionAmount = Number(milestone.platform_commission_amount ?? 0);
-      if (commissionAmount > 0) {
-        const { error: commissionLedgerError } = await supabase.from('escrow_ledger').insert({
-          project_id: milestone.project_id,
-          milestone_id: milestone.id,
-          entry_type: 'fee',
-          amount: commissionAmount,
-          note: `Homeowner platform commission for ${milestone.name}`
-        });
-        if (commissionLedgerError) throw commissionLedgerError;
-      }
-
       // 3. Audit log
       const { error: auditError } = await supabase.from('audit_log').insert({
         actor_id: user?.id,
@@ -108,15 +96,14 @@ export default function MilestoneReleasesPage() {
         entity_id: milestone.id,
         details: {
           contractor_amount: milestone.amount,
-          commission_amount: commissionAmount,
-          homeowner_total_amount: milestone.homeowner_total_amount ?? milestone.amount + commissionAmount,
+          homeowner_total_amount: milestone.homeowner_total_amount ?? milestone.amount,
           milestone_name: milestone.name
         }
       });
       if (auditError) throw auditError;
 
       setSuccessMsg(
-        `Contractor payout of ${formatCurrency(milestone.amount)} authorized; homeowner commission: ${formatCurrency(commissionAmount)}.`
+        `Contractor payout of ${formatCurrency(milestone.amount)} authorized.`
       );
       await loadData();
     } catch (err: unknown) {

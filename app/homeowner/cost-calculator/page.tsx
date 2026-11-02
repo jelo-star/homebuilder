@@ -52,35 +52,12 @@ export default function CostCalculatorPage() {
   const [saveSuccess, setSaveSuccess] = React.useState(false);
   const [publishing, setPublishing] = React.useState(false);
   const [publishError, setPublishError] = React.useState('');
-  const [platformCommissionPercent, setPlatformCommissionPercent] = React.useState<number | null>(null);
-  const [commissionLoadError, setCommissionLoadError] = React.useState('');
 
   React.useEffect(() => {
     if (!publishError) return;
     const t = setTimeout(() => setPublishError(''), 4000);
     return () => clearTimeout(t);
   }, [publishError]);
-
-  React.useEffect(() => {
-    let active = true;
-    createClient()
-      .rpc('get_current_platform_commission_percent')
-      .then(({ data, error }) => {
-        if (!active) return;
-        if (error) {
-          setCommissionLoadError(`Platform commission is unavailable. Apply Supabase migration 75, then reload. ${error.message}`);
-          return;
-        }
-        const commissionPercent = Number(data);
-        if (!Number.isFinite(commissionPercent) || commissionPercent < 0 || commissionPercent > 100) {
-          setCommissionLoadError('The configured platform commission is invalid. Contact an administrator.');
-          return;
-        }
-        setPlatformCommissionPercent(commissionPercent);
-      });
-
-    return () => { active = false; };
-  }, []);
 
   const estimateInput = React.useMemo(() => ({
     projectType: workType,
@@ -188,9 +165,6 @@ export default function CostCalculatorPage() {
 
     try {
       if (!estimateResult) throw new Error(estimateError || 'An active database benchmark is required to publish this project.');
-      if (platformCommissionPercent == null) {
-        throw new Error(commissionLoadError || 'The platform commission could not be verified. Reload the page before creating this project.');
-      }
       if (!floorArea || !floors || !province || !city.trim()) {
         throw new Error('Enter a floor area, number of floors, province, and city before publishing.');
       }
@@ -622,25 +596,12 @@ export default function CostCalculatorPage() {
                   </span>
                 </div>
               </div>
-              <div className="rounded-xl border border-emerald-200 bg-emerald-50/70 p-3 text-xs">
-                <p className="font-bold text-emerald-900">HomeBuilder platform commission</p>
-                {commissionLoadError ? (
-                  <p role="alert" className="mt-1 text-rose-700">{commissionLoadError}</p>
-                ) : platformCommissionPercent == null ? (
-                  <p className="mt-1 text-slate-600">Loading the current commission rate…</p>
-                ) : (
-                  <p className="mt-1 leading-relaxed text-emerald-900">
-                    Current rate: <strong>{platformCommissionPercent}%</strong>. It will be locked when you publish and added to the accepted contractor quote. The final peso amount is calculated after you select a proposal.
-                  </p>
-                )}
-              </div>
-
                   {/* Primary Call to Action */}
                   <div className="pt-2 space-y-2">
                 <button
                   type="button"
                   onClick={handleDirectPublish}
-                  disabled={publishing || !estimateResult || platformCommissionPercent == null}
+                  disabled={publishing || !estimateResult}
                   className="w-full flex items-center justify-center gap-2 py-3 bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs rounded-xl shadow-xs transition-all hover:shadow disabled:opacity-50"
                 >
                   <CheckCircle2 className="w-4 h-4" />

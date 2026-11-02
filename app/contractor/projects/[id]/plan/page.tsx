@@ -280,10 +280,12 @@ function ContractorProjectPlanContent() {
   }, [projectId]);
 
   // Calculations
-  const agreedContractAmount = awardedQuote?.price || project?.budget || project?.est_mid || 0;
+  const agreedContractAmount = Number(project?.homeowner_total_amount ?? awardedQuote?.price ?? project?.budget ?? project?.est_mid ?? 0);
   const totalAllocatedAmount = rows.reduce((sum, r) => sum + (Number(r.amount) || 0), 0);
   const remainingUnallocated = agreedContractAmount - totalAllocatedAmount;
-  const isFullyAllocated = Math.abs(remainingUnallocated) < 1; // within 1 peso tolerance
+  const isExactlyMatched = Math.abs(remainingUnallocated) < 0.01;
+  const isFullyAllocated = isExactlyMatched;
+  const isUnderAllocated = remainingUnallocated > 0.01;
   const isExceeded = remainingUnallocated < -0.01;
   const isPlanApproved = planStatus === 'approved';
 
@@ -376,11 +378,11 @@ function ContractorProjectPlanContent() {
         return `Milestone #${r.seq}: End date cannot be earlier than start date.`;
       }
     }
-    if (!isFullyAllocated) {
+    if (!isExactlyMatched) {
       if (isExceeded) {
-        return `Milestone allocation exceeds agreed contract amount by ${formatCurrency(Math.abs(remainingUnallocated))}.`;
+        return `Milestone allocation exceeds the agreed contract amount by ${formatCurrency(Math.abs(remainingUnallocated))}. It must match ${formatCurrency(agreedContractAmount)} exactly.`;
       }
-      return `Milestone allocation is incomplete. Remaining unallocated amount: ${formatCurrency(remainingUnallocated)}.`;
+      return `Milestone allocation is below the agreed contract amount by ${formatCurrency(remainingUnallocated)}. It must total ${formatCurrency(agreedContractAmount)} exactly.`;
     }
     return null;
   };
@@ -623,11 +625,11 @@ function ContractorProjectPlanContent() {
             </button>
             <button
               onClick={handleSubmitPlan}
-              disabled={isSubmitting || isPlanApproved}
+              disabled={isSubmitting || isPlanApproved || !isExactlyMatched}
               className="px-5 py-2 rounded-xl bg-[#136F48] hover:bg-[#0f5939] disabled:bg-slate-300 disabled:cursor-not-allowed text-white text-xs font-bold shadow-xs flex items-center gap-1.5 transition-colors"
             >
               <Send className="w-4 h-4" />
-              <span>{isSubmitting ? 'Submitting...' : 'Submit for Approval'}</span>
+              <span>{isSubmitting ? 'Submitting...' : !isExactlyMatched ? 'Sync Total to Submit' : 'Submit for Approval'}</span>
             </button>
           </div>
         </div>
@@ -654,6 +656,20 @@ function ContractorProjectPlanContent() {
             <div className="text-xs text-emerald-900">
               <span className="font-bold block mb-0.5">Project Plan Approved and Locked</span>
               The homeowner approved this schedule. Milestone details and allocations can no longer be edited.
+            </div>
+          </div>
+        )}
+
+        {!isPlanApproved && !isExactlyMatched && (
+          <div className="bg-amber-50 border border-amber-200 rounded-2xl p-4 flex items-start gap-3">
+            <AlertCircle className="w-5 h-5 text-amber-600 shrink-0 mt-0.5" />
+            <div className="text-xs text-amber-900">
+              <span className="font-bold block mb-0.5">Allocation must match the agreed contract amount exactly.</span>
+              <span>
+                {isUnderAllocated
+                  ? `Current total is ${formatCurrency(totalAllocatedAmount)}. You still need ${formatCurrency(remainingUnallocated)} to reach ${formatCurrency(agreedContractAmount)}.`
+                  : `Current total is ${formatCurrency(totalAllocatedAmount)}. This exceeds the agreed contract amount by ${formatCurrency(Math.abs(remainingUnallocated))}.`}
+              </span>
             </div>
           </div>
         )}
@@ -931,7 +947,7 @@ function ContractorProjectPlanContent() {
                   ) : isExceeded ? (
                     <div className="text-xs font-bold text-red-600 flex items-center gap-1.5">
                       <AlertTriangle className="w-4 h-4 text-red-500" />
-                      <span>Warning: Milestone allocation exceeds the agreed contract amount by {formatCurrency(Math.abs(remainingUnallocated))}.</span>
+                      <span>Warning: Milestone allocation exceeds the agreed contract amount by {formatCurrency(Math.abs(remainingUnallocated))}. It must match {formatCurrency(agreedContractAmount)} exactly.</span>
                     </div>
                   ) : (
                     <div className="text-xs font-bold text-amber-700 flex items-center gap-1.5">
@@ -1093,7 +1109,7 @@ function ContractorProjectPlanContent() {
                 <button
                   type="button"
                   onClick={handleSubmitPlan}
-                  disabled={isSubmitting || !isFullyAllocated || isPlanApproved}
+                  disabled={isSubmitting || !isExactlyMatched || isPlanApproved}
                   className="w-full py-2.5 px-4 rounded-xl text-xs font-bold text-white bg-[#136F48] hover:bg-[#0f5939] disabled:bg-slate-300 disabled:cursor-not-allowed shadow-xs transition-colors flex items-center justify-center gap-1.5"
                 >
                   <Send className="w-4 h-4" />
@@ -1102,6 +1118,8 @@ function ContractorProjectPlanContent() {
                       ? 'Plan Approved by Homeowner'
                       : isSubmitting
                       ? 'Submitting...'
+                      : !isExactlyMatched
+                      ? 'Sync Total to Submit'
                       : 'Submit for Homeowner Approval'}
                   </span>
                 </button>
@@ -1116,7 +1134,7 @@ function ContractorProjectPlanContent() {
                   <span>{isSavingDraft ? 'Saving Draft...' : 'Save Draft'}</span>
                 </button>
 
-                {!isFullyAllocated && (
+                {!isExactlyMatched && (
                   <p className="text-[11px] text-amber-700 text-center leading-tight">
                     * Total milestone allocation must match the agreed contract amount exactly before submission.
                   </p>

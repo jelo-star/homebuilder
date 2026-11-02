@@ -94,8 +94,6 @@ export default function CreateProjectPage() {
   const [bedrooms, setBedrooms] = React.useState('');
   const [bathrooms, setBathrooms] = React.useState('');
   const [budget, setBudget] = React.useState('');
-  const [platformCommissionPercent, setPlatformCommissionPercent] = React.useState<number | null>(null);
-  const [commissionLoadError, setCommissionLoadError] = React.useState('');
   const [desiredStart, setDesiredStart] = React.useState<StartWindow>('in_2_months');
   const [paymentTranches, setPaymentTranches] = React.useState<number>(3);
   const [planFilePath, setPlanFilePath] = React.useState<string | null>(null);
@@ -155,27 +153,6 @@ export default function CreateProjectPage() {
   const liveEstimate = estimateResult?.key === estimateInputKey ? estimateResult.value : null;
   const estimateError = estimateFailure?.key === estimateInputKey ? estimateFailure.message : '';
   const estimateLoading = hasEstimateInputs && !liveEstimate && !estimateError;
-
-  React.useEffect(() => {
-    let active = true;
-    createClient()
-      .rpc('get_current_platform_commission_percent')
-      .then(({ data, error }) => {
-        if (!active) return;
-        if (error) {
-          setCommissionLoadError(`Platform commission is unavailable. Apply Supabase migration 75, then reload. ${error.message}`);
-          return;
-        }
-        const commissionPercent = Number(data);
-        if (!Number.isFinite(commissionPercent) || commissionPercent < 0 || commissionPercent > 100) {
-          setCommissionLoadError('The configured platform commission is invalid. Contact an administrator.');
-          return;
-        }
-        setPlatformCommissionPercent(commissionPercent);
-      });
-
-    return () => { active = false; };
-  }, []);
 
   React.useEffect(() => {
     if (!hasEstimateInputs) return;
@@ -267,11 +244,6 @@ export default function CreateProjectPage() {
       setErrorMsg(estimateError || 'An active database benchmark is required before saving or publishing this project.');
       return;
     }
-    if (platformCommissionPercent == null) {
-      setErrorMsg(commissionLoadError || 'The platform commission could not be verified. Reload the page before creating this project.');
-      return;
-    }
-
     setSaving(true);
     setErrorMsg('');
 
