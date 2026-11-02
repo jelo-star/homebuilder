@@ -11,7 +11,7 @@ Connecting homeowners with vetted general contractors in the Philippines through
 
 Runtime user, contractor, project, quotation, payment, and settings records are loaded from Supabase. The application does not use local mock records as a fallback when a query returns no data. Empty database results are shown as empty states, and construction estimates require an active row in `construction_benchmarks`.
 
-Apply migrations through `68_fix_milestone_image_project_scope.sql` before using signup, the public contractor directory, or project features. Migration 66 ensures homeowners can read contractor milestone proof records for their own projects. Migrations 67 and 68 allow homeowners to create signed URLs for contractor-uploaded milestone images in their own project, including projects where the milestone quote is the authoritative relationship. The migrations in this repository must be applied to the Supabase project separately.
+Apply the SQL files in `supabase/migrations` to the Supabase project in order; migrations must be applied separately from the application code. To manage the public homepage's Popular Home Services cards, apply `103_popular_services_management.sql` in the Supabase SQL Editor. This creates and seeds the `popular_services` table and refreshes the API schema cache. If the homepage reports that the table is missing, verify that this migration ran successfully, then reload the page.
 
 ---
 

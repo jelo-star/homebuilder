@@ -20,3 +20,45 @@ body {
 * {
   border-color: #e2e8f0;
 }
+
+@keyframes popular-services-scroll {
+  from {
+    transform: translateX(0);
+  }
+
+  to {
+    transform: translateX(-50%);
+  }
+}
+
+.popular-services-track {
+  animation-name: popular-services-scroll;
+  animation-timing-function: linear;
+  animation-iteration-count: infinite;
+}
+
+.popular-service-card {
+  width: 86vw;
+}
+
+@media (min-width: 640px) {
+  .popular-service-card {
+    width: 44vw;
+  }
+}
+
+@media (min-width: 1024px) {
+  .popular-service-card {
+    width: calc(33.333333vw - 20px);
+  }
+}
+
+.popular-services-marquee:focus-within .popular-services-track {
+  animation-play-state: paused;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .popular-services-track {
+    animation: none;
+  }
+}
