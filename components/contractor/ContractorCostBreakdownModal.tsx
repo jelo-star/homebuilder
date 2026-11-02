@@ -8,14 +8,14 @@ import { formatCurrency, formatNumberInput, parseNumberInput } from '@/lib/utils
 
 type Material = { name: string; quantity: string; unit: string; unitPrice: string };
 type Labor = { position: string; workers: string; dailyRate: string; days: string };
-type Equipment = { name: string; quantity: string; rate: string; duration: string; arrangement: string; fuel: string; maintenance: string };
+type Equipment = { name: string; quantity: string; rate: string; duration: string; fuel: string; maintenance: string };
 type Expense = { name: string; description: string; amount: string };
 type DetailedProposal = { materials?: Material[]; labor?: Labor[]; equipment?: Equipment[]; overhead?: Expense[]; profit?: { amount?: number }; contingency?: { amount?: number }; taxes?: { amount?: number } };
 type ProposalTab = 'overview' | 'materials' | 'labor' | 'machinery' | 'costs';
 
 const blankMaterial = (): Material => ({ name: '', quantity: '', unit: '', unitPrice: '' });
 const blankLabor = (): Labor => ({ position: '', workers: '', dailyRate: '', days: '' });
-const blankEquipment = (): Equipment => ({ name: '', quantity: '', rate: '', duration: '', arrangement: '', fuel: '', maintenance: '' });
+const blankEquipment = (): Equipment => ({ name: '', quantity: '', rate: '', duration: '', fuel: '', maintenance: '' });
 const blankExpense = (): Expense => ({ name: '', description: '', amount: '' });
 const money = (value: string | number) => Math.round((typeof value === 'string' ? parseNumberInput(value) : Number(value) || 0) * 100) / 100;
 const sum = (values: number[]) => money(values.reduce((total, value) => total + value, 0));
@@ -34,7 +34,9 @@ export default function ContractorCostBreakdownModal({ project, existingQuote, i
   const [materials, setMaterials] = React.useState(() => (saved?.materials || [blankMaterial()]).map(item => ({ ...item, unitPrice: formatNumberInput(item.unitPrice) })));
   const [labor, setLabor] = React.useState(() => (saved?.labor || [blankLabor()]).map(item => ({ ...item, dailyRate: formatNumberInput(item.dailyRate) })));
   const [equipment, setEquipment] = React.useState(() => (saved?.equipment || [blankEquipment()]).map(item => ({
-    ...item,
+    name: item.name,
+    quantity: item.quantity,
+    duration: item.duration,
     rate: formatNumberInput(item.rate),
     fuel: formatNumberInput(item.fuel),
     maintenance: formatNumberInput(item.maintenance),
@@ -63,7 +65,7 @@ export default function ContractorCostBreakdownModal({ project, existingQuote, i
     const required = (value: string) => value.trim() !== '' && Number.isFinite(parseNumberInput(value)) && parseNumberInput(value) >= 0;
     const enteredMaterials = materials.filter(item => item.name || item.quantity || item.unit || item.unitPrice);
     const enteredLabor = labor.filter(item => item.position || item.workers || item.dailyRate || item.days);
-    const enteredEquipment = equipment.filter(item => item.name || item.quantity || item.rate || item.duration || item.arrangement || item.fuel || item.maintenance);
+    const enteredEquipment = equipment.filter(item => item.name || item.quantity || item.rate || item.duration || item.fuel || item.maintenance);
     const enteredOverhead = overhead.filter(item => item.name || item.description || item.amount);
     if (!required(duration) || !Number.isInteger(Number(duration)) || Number(duration) <= 0) {
       return 'Enter the estimated construction duration as a whole number of months.';
@@ -104,13 +106,15 @@ export default function ContractorCostBreakdownModal({ project, existingQuote, i
           .filter(item => item.position || item.workers || item.dailyRate || item.days)
           .map(item => ({ ...item, dailyRate: String(money(item.dailyRate)) })),
         equipment: equipment
-          .filter(item => item.name || item.quantity || item.rate || item.duration || item.arrangement || item.fuel || item.maintenance)
+          .filter(item => item.name || item.quantity || item.rate || item.duration || item.fuel || item.maintenance)
           .map(item => ({
-          ...item,
-          rate: String(money(item.rate)),
-          fuel: String(money(item.fuel)),
-          maintenance: String(money(item.maintenance)),
-        })),
+            name: item.name,
+            quantity: item.quantity,
+            rate: String(money(item.rate)),
+            duration: item.duration,
+            fuel: String(money(item.fuel)),
+            maintenance: String(money(item.maintenance)),
+          })),
         overhead: overhead
           .filter(item => item.name || item.description || item.amount)
           .map(item => ({ ...item, amount: String(money(item.amount)) })),
@@ -211,7 +215,6 @@ export default function ContractorCostBreakdownModal({ project, existingQuote, i
               {input('Quantity', item.quantity, value => update(setEquipment, index, { quantity: value }), true)}
               {input('Rate / price', item.rate, value => update(setEquipment, index, { rate: value }), true, 'text', { formatThousands: true })}
               {input('Duration', item.duration, value => update(setEquipment, index, { duration: value }), true)}
-              {input('Arrangement', item.arrangement, value => update(setEquipment, index, { arrangement: value }))}
               {input('Fuel / operating cost', item.fuel, value => update(setEquipment, index, { fuel: value }), true, 'text', { formatThousands: true })}
               {input('Maintenance / mobilization', item.maintenance, value => update(setEquipment, index, { maintenance: value }), true, 'text', { formatThousands: true })}
             </div>

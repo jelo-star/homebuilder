@@ -20,6 +20,7 @@ import {
   Eye,
   X,
   FileSpreadsheet,
+  Printer,
   Layers,
   HardHat,
   Sparkles,
@@ -77,7 +78,7 @@ type SavedDetailedProposal = {
   }>;
   materials?: Array<{ name: string; quantity: string; unit: string; unitPrice: string }>;
   labor?: Array<{ position: string; workers: string; dailyRate: string; days: string }>;
-  equipment?: Array<{ name: string; quantity: string; rate: string; duration: string; arrangement: string; fuel: string; maintenance: string }>;
+  equipment?: Array<{ name: string; quantity: string; rate: string; duration: string; fuel: string; maintenance: string }>;
   overhead?: Array<{ name: string; description: string; amount: string }>;
   profit?: { amount?: number };
   contingency?: { amount?: number };
@@ -3593,28 +3594,48 @@ function ProjectDetailsContent() {
         {/* ==================================================================== */}
         {viewingMaterialQuote && (
           <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 p-3 backdrop-blur-xs sm:p-4">
-            <div className="flex max-h-[92dvh] min-h-0 w-full max-w-5xl flex-col space-y-4 overflow-hidden rounded-3xl border border-slate-200 bg-white p-4 shadow-2xl animate-in fade-in zoom-in-95 duration-200 sm:space-y-5 sm:p-8">
-              <div className="flex shrink-0 items-start justify-between gap-3 border-b border-slate-200/80 pb-4">
+            <div className="quotation-print-area flex max-h-[92dvh] min-h-0 w-full max-w-5xl flex-col space-y-4 overflow-hidden rounded-3xl border border-slate-200 bg-white p-4 shadow-2xl animate-in fade-in zoom-in-95 duration-200 sm:space-y-5 sm:p-8">
+              <div className="flex shrink-0 items-start justify-between gap-3 border-b-2 border-slate-800 pb-4">
                 <div className="min-w-0">
-                  <div className="flex items-center gap-2 text-emerald-700 font-bold text-xs uppercase tracking-wider mb-1">
+                  <div className="mb-1 flex items-center gap-2 text-emerald-700 font-bold text-xs uppercase tracking-wider">
                     <FileSpreadsheet className="w-4 h-4 text-emerald-600" />
-                    <span>Official Verified Cost Breakdown</span>
+                    <span>Contractor Quotation</span>
                   </div>
                   <h3 className="text-base font-bold leading-snug text-slate-900 sm:text-xl">
-                    Materials Quotation & Bill of Quantities (BOQ)
+                    Quotation & Itemized Cost Schedule
                   </h3>
                   <p className="mt-1 text-xs leading-relaxed text-slate-500">
-                    Itemized materials, structural rebar, aggregates, MEP systems, architectural finishes, and certified labor.
+                    Submitted for homeowner review
                   </p>
                 </div>
-                <button
-                  type="button"
-                  aria-label="Close cost breakdown"
-                  onClick={() => setViewingMaterialQuote(null)}
-                  className="shrink-0 rounded-lg p-1.5 text-slate-400 transition hover:bg-slate-100 hover:text-slate-700"
-                >
-                  <X className="h-5 w-5" />
-                </button>
+                <div className="quotation-document-controls flex shrink-0 items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const previousTitle = document.title;
+                      const reference = viewingMaterialQuote.quote_ref || viewingMaterialQuote.id.slice(0, 8).toUpperCase();
+                      document.title = `Quotation-${reference}`;
+                      document.body.classList.add('printing-quotation');
+                      window.addEventListener('afterprint', () => {
+                        document.body.classList.remove('printing-quotation');
+                        document.title = previousTitle;
+                      }, { once: true });
+                      window.print();
+                    }}
+                    className="inline-flex items-center gap-1.5 rounded-lg bg-[#136F48] px-3 py-2 text-xs font-bold text-white transition hover:bg-[#0f5939]"
+                  >
+                    <Printer className="h-4 w-4" />
+                    <span>Print / Save PDF</span>
+                  </button>
+                  <button
+                    type="button"
+                    aria-label="Close quotation"
+                    onClick={() => setViewingMaterialQuote(null)}
+                    className="rounded-lg p-1.5 text-slate-400 transition hover:bg-slate-100 hover:text-slate-700"
+                  >
+                    <X className="h-5 w-5" />
+                  </button>
+                </div>
               </div>
 
               {/* Summary Cards */}
@@ -3649,7 +3670,7 @@ function ProjectDetailsContent() {
                       id: `equipment-${index}`,
                       category: 'Equipment',
                       item_name: item.name,
-                      specifications: `${item.arrangement || 'Equipment'} · ${Number(item.duration) || 0} period(s)`,
+                      specifications: `${Number(item.duration) || 0} period(s)`,
                       quantity: Number(item.quantity) || 0,
                       unit: 'unit(s)',
                       unit_price: Number(item.rate) || 0,
@@ -3759,26 +3780,48 @@ function ProjectDetailsContent() {
 
                 return (
                   <>
-                    <div className="hidden min-h-0 flex-1 overflow-auto rounded-2xl border border-slate-200 shadow-2xs md:block">
-                      <table className="w-full text-left text-xs">
-                        <thead className="bg-slate-50 border-b border-slate-200 text-[11px] font-bold text-slate-600 uppercase tracking-wider sticky top-0 z-10">
+                    <div className="grid shrink-0 grid-cols-2 gap-3 rounded-xl border border-slate-200 bg-slate-50 p-3 text-xs sm:grid-cols-4 sm:p-4">
+                      <div>
+                        <div className="text-[10px] font-bold uppercase tracking-wider text-slate-500">Quotation No.</div>
+                        <div className="mt-1 font-semibold text-slate-900">{viewingMaterialQuote.quote_ref || viewingMaterialQuote.id.slice(0, 8).toUpperCase()}</div>
+                      </div>
+                      <div>
+                        <div className="text-[10px] font-bold uppercase tracking-wider text-slate-500">Project</div>
+                        <div className="mt-1 font-semibold text-slate-900">{project?.title || 'Construction Project'}</div>
+                      </div>
+                      <div>
+                        <div className="text-[10px] font-bold uppercase tracking-wider text-slate-500">Contractor</div>
+                        <div className="mt-1 font-semibold text-slate-900">{viewingMaterialQuote.contractor_profile?.business_name || 'Contractor'}</div>
+                      </div>
+                      <div>
+                        <div className="text-[10px] font-bold uppercase tracking-wider text-slate-500">Date Submitted</div>
+                        <div className="mt-1 font-semibold text-slate-900">
+                          {viewingMaterialQuote.submitted_at || viewingMaterialQuote.created_at
+                            ? formatDate(viewingMaterialQuote.submitted_at || viewingMaterialQuote.created_at)
+                            : '—'}
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="quotation-print-scroll hidden min-h-0 flex-1 overflow-auto rounded-xl border border-slate-200 md:block">
+                      <table className="quotation-print-table w-full text-left text-xs">
+                        <thead className="bg-slate-50 border-b border-slate-200 text-[10px] font-bold text-slate-600 uppercase tracking-wider sticky top-0 z-10">
                           <tr>
-                            <th className="py-2.5 px-3 w-10 text-center">#</th>
-                            <th className="py-2.5 px-3 w-24">Category</th>
-                            <th className="py-2.5 px-3">Item Description & Scope</th>
-                            <th className="py-2.5 px-3">Specifications</th>
-                            <th className="py-2.5 px-3 text-right">Qty</th>
-                            <th className="py-2.5 px-3">Unit</th>
-                            <th className="py-2.5 px-3 text-right">Unit Price</th>
-                            <th className="py-2.5 px-3 text-right">Line Total</th>
-                            <th className="py-2.5 px-3">Supplier</th>
+                            <th className="py-2.5 px-2 w-8 text-center sm:px-3">#</th>
+                            <th className="py-2.5 px-2 sm:px-3">Category</th>
+                            <th className="py-2.5 px-2 sm:px-3">Description & Scope</th>
+                            <th className="py-2.5 px-2 sm:px-3">Specifications</th>
+                            <th className="py-2.5 px-2 text-right sm:px-3">Qty</th>
+                            <th className="py-2.5 px-2 sm:px-3">Unit</th>
+                            <th className="py-2.5 px-2 text-right sm:px-3">Unit Price</th>
+                            <th className="py-2.5 px-2 text-right sm:px-3">Line Total</th>
                           </tr>
                         </thead>
                         <tbody className="divide-y divide-slate-100 bg-white">
                           {items.map((item, idx) => (
-                            <tr key={item.id || idx} className="hover:bg-slate-50/70 transition">
-                              <td className="py-2.5 px-3 text-center text-slate-400 font-mono text-[11px]">{idx + 1}</td>
-                              <td className="py-2.5 px-3">
+                            <tr key={item.id || idx} className="quotation-print-row hover:bg-slate-50/70 transition">
+                              <td className="py-2.5 px-2 text-center text-slate-400 font-mono text-[11px] sm:px-3">{idx + 1}</td>
+                              <td className="py-2.5 px-2 sm:px-3">
                                 <span className={`px-2 py-0.5 rounded-md text-[10px] font-bold uppercase ${item.category === 'Labor' ? 'bg-amber-100 text-amber-900 border border-amber-200' :
                                   item.category === 'Equipment' ? 'bg-purple-100 text-purple-900 border border-purple-200' :
                                     'bg-blue-50 text-blue-800 border border-blue-200'
@@ -3786,19 +3829,25 @@ function ProjectDetailsContent() {
                                   {item.category || 'Material'}
                                 </span>
                               </td>
-                              <td className="py-2.5 px-3 font-semibold text-slate-900">{item.item_name}</td>
-                              <td className="py-2.5 px-3 text-slate-500 text-[11px]">{item.specifications || '—'}</td>
-                              <td className="py-2.5 px-3 text-right font-mono font-medium">{item.quantity}</td>
-                              <td className="py-2.5 px-3 text-slate-500">{item.unit}</td>
-                              <td className="py-2.5 px-3 text-right font-mono text-slate-700">{formatCurrency(Number(item.unit_price) || 0)}</td>
-                              <td className="py-2.5 px-3 text-right font-mono font-bold text-slate-900">{formatCurrency(item.line_total)}</td>
-                              <td className="py-2.5 px-3 text-[11px] text-slate-600 truncate max-w-[150px]">{item.supplier || 'Verified Supplier'}</td>
+                              <td className="py-2.5 px-2 font-semibold text-slate-900 sm:px-3">{item.item_name}</td>
+                              <td className="py-2.5 px-2 text-slate-500 text-[11px] sm:px-3">{item.specifications || '—'}</td>
+                              <td className="py-2.5 px-2 text-right font-mono font-medium sm:px-3">{item.quantity}</td>
+                              <td className="py-2.5 px-2 text-slate-500 sm:px-3">{item.unit}</td>
+                              <td className="py-2.5 px-2 text-right font-mono text-slate-700 sm:px-3">{formatCurrency(Number(item.unit_price) || 0)}</td>
+                              <td className="py-2.5 px-2 text-right font-mono font-bold text-slate-900 sm:px-3">{formatCurrency(item.line_total)}</td>
                             </tr>
                           ))}
+                          {items.length === 0 && (
+                            <tr>
+                              <td colSpan={8} className="p-8 text-center text-xs text-slate-500">
+                                No itemized cost details are available for this quotation.
+                              </td>
+                            </tr>
+                          )}
                         </tbody>
                       </table>
                     </div>
-                    <div className="min-h-0 flex-1 space-y-2 overflow-y-auto md:hidden">
+                    <div className="quotation-mobile-items min-h-0 flex-1 space-y-2 overflow-y-auto md:hidden">
                       {items.map((item, idx) => (
                         <article key={item.id || idx} className="rounded-xl border border-slate-200 bg-white p-3">
                           <div className="flex items-start justify-between gap-3">
@@ -3818,25 +3867,19 @@ function ProjectDetailsContent() {
                           <div className="mt-2 grid grid-cols-2 gap-x-3 gap-y-1 border-t border-slate-100 pt-2 text-[11px] text-slate-600">
                             <span>Quantity: <strong className="text-slate-800">{item.quantity} {item.unit}</strong></span>
                             <span className="text-right">Unit price: <strong className="text-slate-800">{formatCurrency(Number(item.unit_price) || 0)}</strong></span>
-                            {item.supplier && <span className="col-span-2 break-words">Supplier: {item.supplier}</span>}
                           </div>
                         </article>
                       ))}
-                      {items.length === 0 && (
-                        <p className="rounded-xl border border-slate-200 p-4 text-center text-xs text-slate-500">
-                          No itemized cost details are available for this quotation.
-                        </p>
-                      )}
                     </div>
                     <div className="flex shrink-0 items-center justify-between gap-3 border-t-2 border-slate-800 pt-3">
-                      <span className="text-sm font-bold text-slate-900">Total</span>
+                      <span className="text-sm font-bold text-slate-900">Total Quoted Amount</span>
                       <span className="text-lg font-extrabold text-emerald-700">{formatCurrency(totalBOQ)}</span>
                     </div>
                   </>
                 );
               })()}
 
-              <div className="flex shrink-0 justify-end border-t border-slate-100 pt-3">
+              <div className="quotation-document-controls flex shrink-0 justify-end border-t border-slate-100 pt-3">
                 <button
                   type="button"
                   onClick={() => setViewingMaterialQuote(null)}

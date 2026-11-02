@@ -21,7 +21,6 @@ type DetailItem = {
   days?: string | number;
   rate?: string | number;
   duration?: string | number;
-  arrangement?: string;
   fuel?: string | number;
   maintenance?: string | number;
   amount?: string | number;
@@ -45,7 +44,7 @@ export default function QuoteCostBreakdown({ quote, title = 'Project Cost Breakd
   const sections: [string, DetailItem[] | undefined, (item: DetailItem) => string][] = [
     ['Materials', detailed?.materials, item => `${item.name || 'Material'} — ${item.quantity || 0} ${item.unit || ''} × ${money(item.unitPrice)}`],
     ['Labor', detailed?.labor, item => `${item.position || 'Labor'} — ${item.workers || 0} workers × ${money(item.dailyRate)} × ${item.days || 0} days`],
-    ['Machinery', detailed?.equipment, item => `${item.name || 'Machine'} — ${item.quantity || 0} × ${money(item.rate)} × ${item.duration || 0} ${item.arrangement ? `(${item.arrangement})` : ''}`],
+    ['Machinery', detailed?.equipment, item => `${item.name || 'Machine'} — ${item.quantity || 0} × ${money(item.rate)} × ${item.duration || 0}`],
     ['Site management and overhead', detailed?.overhead, item => `${item.name || 'Expense'} — ${money(item.amount)}${item.description ? ` — ${item.description}` : ''}`],
   ];
 
