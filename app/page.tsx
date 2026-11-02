@@ -284,67 +284,48 @@ export default function HomePage() {
             <p className="mt-2 text-base text-slate-600">Explore work types available in the contractor directory.</p>
           </div>
 
-          <div
-            className="popular-services-marquee relative left-1/2 mt-8 w-screen -translate-x-1/2 overflow-hidden"
-            role="region"
-            aria-label="Popular home services"
-            aria-roledescription="carousel"
-          >
+          <div className="mx-auto mt-8 grid max-w-[1320px] gap-5 sm:grid-cols-2 xl:grid-cols-3">
             {servicesError ? (
-              <p role="alert" className="text-center text-sm text-red-700">{servicesError}</p>
+              <p role="alert" className="col-span-full text-center text-sm text-red-700">{servicesError}</p>
             ) : servicesLoading ? (
-              <p className="text-center text-sm text-slate-600">Loading popular services...</p>
+              <p className="col-span-full text-center text-sm text-slate-600">Loading popular services...</p>
             ) : services.length === 0 ? (
-              <p className="text-center text-sm text-slate-600">Popular services will appear here soon.</p>
+              <p className="col-span-full text-center text-sm text-slate-600">Popular services will appear here soon.</p>
             ) : (
-              <div
-                className="popular-services-track flex w-max"
-                style={{ animationDuration: `${Math.max(12, services.length * 3)}s` }}
-              >
-                {[false, true].map((isDuplicate) => (
-                  <div
-                    key={isDuplicate ? 'duplicate' : 'services'}
-                    aria-hidden={isDuplicate || undefined}
-                    className="flex w-max shrink-0 gap-5 pr-5"
+              services.map((item) => {
+                const query = new URLSearchParams({ [item.filter_key]: item.filter_value });
+
+                return (
+                  <Link
+                    key={item.id}
+                    href={`/contractors?${query.toString()}`}
+                    className="group w-full overflow-hidden rounded-[24px] border border-slate-200 bg-white shadow-[0_10px_24px_rgba(15,23,42,0.06)] transition hover:shadow-[0_18px_36px_rgba(15,23,42,0.10)]"
                   >
-                    {services.map((item) => {
-                      const query = new URLSearchParams({ [item.filter_key]: item.filter_value });
+                    <div className="relative h-[290px] overflow-hidden">
+                      <div
+                        aria-hidden="true"
+                        className="absolute inset-0 bg-cover bg-center transition duration-500 group-hover:scale-[1.04]"
+                        style={{ backgroundImage: `url("${item.image_url}")` }}
+                      />
+                      <div className="absolute inset-0 bg-gradient-to-t from-[#0f172a]/15 via-transparent to-transparent" />
+                      <div className="absolute left-4 top-4 rounded-full border border-white/40 bg-white/70 px-3 py-1 text-xs font-semibold uppercase tracking-[0.12em] text-slate-700 backdrop-blur-sm">
+                        {item.title}
+                      </div>
+                    </div>
 
-                      return (
-                        <Link
-                          key={item.id}
-                          href={`/contractors?${query.toString()}`}
-                          tabIndex={isDuplicate ? -1 : undefined}
-                          className="popular-service-card group min-w-[280px] shrink-0 overflow-hidden rounded-[24px] border border-slate-200 bg-white shadow-[0_10px_24px_rgba(15,23,42,0.06)] transition hover:shadow-[0_18px_36px_rgba(15,23,42,0.10)]"
-                        >
-                          <div className="relative h-[290px] overflow-hidden">
-                            <div
-                              aria-hidden="true"
-                              className="absolute inset-0 bg-cover bg-center transition duration-500 group-hover:scale-[1.04]"
-                              style={{ backgroundImage: `url("${item.image_url}")` }}
-                            />
-                            <div className="absolute inset-0 bg-gradient-to-t from-[#0f172a]/15 via-transparent to-transparent" />
-                            <div className="absolute left-4 top-4 rounded-full border border-white/40 bg-white/70 px-3 py-1 text-xs font-semibold uppercase tracking-[0.12em] text-slate-700 backdrop-blur-sm">
-                              {item.title}
-                            </div>
-                          </div>
+                    <div className="flex items-center justify-between gap-3 px-5 py-4">
+                      <div>
+                        <h3 className="text-[1.2rem] font-extrabold tracking-[-0.04em] text-slate-900">{item.title}</h3>
+                        <p className="mt-1 text-sm text-slate-600">{item.description}</p>
+                      </div>
 
-                          <div className="flex items-center justify-between gap-3 px-5 py-4">
-                            <div>
-                              <h3 className="text-[1.2rem] font-extrabold tracking-[-0.04em] text-slate-900">{item.title}</h3>
-                              <p className="mt-1 text-sm text-slate-600">{item.description}</p>
-                            </div>
-
-                            <span className="flex h-10 w-10 items-center justify-center rounded-full bg-[#edf4ef] text-[#136F48]">
-                              <ArrowRight className="h-4 w-4" />
-                            </span>
-                          </div>
-                        </Link>
-                      );
-                    })}
-                  </div>
-                ))}
-              </div>
+                      <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-[#edf4ef] text-[#136F48]">
+                        <ArrowRight className="h-4 w-4" />
+                      </span>
+                    </div>
+                  </Link>
+                );
+              })
             )}
           </div>
         </section>
