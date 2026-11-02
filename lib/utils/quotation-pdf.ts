@@ -99,7 +99,7 @@ const getRows = (quote: Quote): QuotationRow[] => {
         description: item.name,
         specifications: item.description,
         quantity: 1,
-        unit: 'lot',
+        unit: '',
         unitPrice: numberValue(item.amount),
         lineTotal: numberValue(item.amount),
       })),
@@ -111,7 +111,7 @@ const getRows = (quote: Quote): QuotationRow[] => {
           description: key === 'profit' ? "Contractor's profit" : key === 'contingency' ? 'Contingency allowance' : 'Taxes and charges',
           specifications: 'Included in proposal total',
           quantity: 1,
-          unit: 'lot',
+          unit: '',
           unitPrice: amount,
           lineTotal: amount,
         }];
@@ -142,7 +142,7 @@ const getRows = (quote: Quote): QuotationRow[] => {
           description,
           specifications,
           quantity: 1,
-          unit: 'lot',
+          unit: '',
           unitPrice: total,
           lineTotal: total,
         }] : [];
@@ -156,7 +156,7 @@ const getRows = (quote: Quote): QuotationRow[] => {
       description: item.item,
       specifications: item.description || '',
       quantity: 1,
-      unit: 'lot',
+      unit: '',
       unitPrice: numberValue(item.amount),
       lineTotal: numberValue(item.amount),
     }));
@@ -171,12 +171,11 @@ export function createQuotationPdf({ project, quote, contractorName }: Quotation
   const pageHeight = pdf.internal.pageSize.getHeight();
   const margin = 14;
   const contentWidth = pageWidth - margin * 2;
-  const reference = quote.quote_ref || quote.id.slice(0, 8).toUpperCase();
   const rows = getRows(quote);
   let y = 18;
 
   pdf.setProperties({
-    title: `Quotation ${reference}`,
+    title: 'Contractor Quotation',
     subject: `Quotation for ${project.title}`,
     author: contractorName,
   });
@@ -191,10 +190,6 @@ export function createQuotationPdf({ project, quote, contractorName }: Quotation
   pdf.setFontSize(10);
   pdf.setTextColor(71, 85, 105);
   pdf.text('Quotation & Itemized Cost Schedule', margin + 7, y + 13);
-  pdf.setFont('helvetica', 'bold');
-  pdf.setFontSize(9);
-  pdf.setTextColor(19, 111, 72);
-  pdf.text(`QUOTATION NO. ${safeText(reference)}`, pageWidth - margin, y + 6, { align: 'right' });
   pdf.setFont('helvetica', 'normal');
   pdf.setTextColor(71, 85, 105);
   pdf.text(`Date: ${safeText(formatDate(quote.submitted_at || quote.created_at))}`, pageWidth - margin, y + 12, { align: 'right' });
@@ -333,7 +328,6 @@ export function createQuotationPdf({ project, quote, contractorName }: Quotation
     pdf.setFont('helvetica', 'normal');
     pdf.setFontSize(8);
     pdf.setTextColor(100, 116, 139);
-    pdf.text(`Quotation ${safeText(reference)}`, margin, pageHeight - 8);
     pdf.text(`Page ${pageNumber} of ${pageCount}`, pageWidth - margin, pageHeight - 8, { align: 'right' });
   }
 

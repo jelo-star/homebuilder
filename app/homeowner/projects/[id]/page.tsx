@@ -3721,7 +3721,7 @@ function ProjectDetailsContent() {
                       item_name: item.name,
                       specifications: item.description,
                       quantity: 1,
-                      unit: 'lot',
+                      unit: '',
                       unit_price: Number(item.amount) || 0,
                       line_total: Number(item.amount) || 0,
                       supplier: '—',
@@ -3740,7 +3740,7 @@ function ProjectDetailsContent() {
                         item_name: labels[key],
                         specifications: 'Included in proposal total',
                         quantity: 1,
-                        unit: 'lot',
+                        unit: '',
                         unit_price: amount,
                         line_total: amount,
                         supplier: '—',
@@ -3766,7 +3766,7 @@ function ProjectDetailsContent() {
                       item_name: 'Skilled Labor & Construction Crew',
                       specifications: 'Licensed foreman, carpenters, masons, steelmen and MEP specialists',
                       quantity: 1,
-                      unit: 'lot',
+                      unit: '',
                       unit_price: Number(mq.labor_cost),
                       line_total: Number(mq.labor_cost),
                       supplier: viewingMaterialQuote.contractor_profile?.business_name || 'Contractor Direct Labor'
@@ -3777,7 +3777,7 @@ function ProjectDetailsContent() {
                       item_name: 'Construction Equipment & Scaffolding',
                       specifications: 'Mixers, vibrators, scaffolding rentals and site tools',
                       quantity: 1,
-                      unit: 'lot',
+                      unit: '',
                       unit_price: Number(mq.equipment_cost),
                       line_total: Number(mq.equipment_cost),
                       supplier: 'Equipment Provider'
@@ -3788,7 +3788,7 @@ function ProjectDetailsContent() {
                       item_name: 'Hauling & Site Logistics',
                       specifications: 'Staged material delivery, debris hauling and disposal',
                       quantity: 1,
-                      unit: 'lot',
+                      unit: '',
                       unit_price: Number(mq.logistics_cost),
                       line_total: Number(mq.logistics_cost),
                       supplier: 'Hauling Services'
@@ -3799,7 +3799,7 @@ function ProjectDetailsContent() {
                       item_name: 'Engineering, Supervision & Permits',
                       specifications: 'Sign-and-seal structural engineering, site safety officer',
                       quantity: 1,
-                      unit: 'lot',
+                      unit: '',
                       unit_price: Number(mq.taxes_cost),
                       line_total: Number(mq.taxes_cost),
                       supplier: 'Engineering Consulting'
@@ -3902,7 +3902,7 @@ function ProjectDetailsContent() {
                             <p className="mt-1 break-words text-xs text-slate-500">{item.specifications}</p>
                           )}
                           <div className="mt-2 grid grid-cols-2 gap-x-3 gap-y-1 border-t border-slate-100 pt-2 text-[11px] text-slate-600">
-                            <span>Quantity: <strong className="text-slate-800">{item.quantity} {item.unit}</strong></span>
+                            <span>Quantity: <strong className="text-slate-800">{item.quantity}{item.unit ? ` ${item.unit}` : ''}</strong></span>
                             <span className="text-right">Unit price: <strong className="text-slate-800">{formatCurrency(Number(item.unit_price) || 0)}</strong></span>
                           </div>
                         </article>

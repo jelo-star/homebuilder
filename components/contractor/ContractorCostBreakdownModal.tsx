@@ -70,7 +70,7 @@ export default function ContractorCostBreakdownModal({ project, existingQuote, i
     if (!required(duration) || !Number.isInteger(Number(duration)) || Number(duration) <= 0) {
       return 'Enter the estimated construction duration as a whole number of months.';
     }
-    if (!enteredMaterials.every(item => item.name.trim() && required(item.quantity) && parseNumberInput(item.quantity) > 0 && item.unit.trim() && required(item.unitPrice))) return 'Complete each material row you started, or clear it.';
+    if (!enteredMaterials.every(item => item.name.trim() && required(item.quantity) && parseNumberInput(item.quantity) > 0 && required(item.unitPrice))) return 'Complete each material row you started, or clear it.';
     if (!enteredLabor.every(item => item.position.trim() && required(item.workers) && parseNumberInput(item.workers) > 0 && required(item.dailyRate) && required(item.days) && parseNumberInput(item.days) > 0)) return 'Complete each labor row you started, or clear it.';
     if (!enteredEquipment.every(item => item.name.trim() && required(item.quantity) && parseNumberInput(item.quantity) > 0 && required(item.rate) && required(item.duration) && parseNumberInput(item.duration) > 0)) return 'Complete each machinery row you started, or clear it.';
     if (!enteredOverhead.every(item => item.name.trim() && item.description.trim() && required(item.amount))) return 'Complete each other-cost row you started, or clear it.';
@@ -81,6 +81,10 @@ export default function ContractorCostBreakdownModal({ project, existingQuote, i
   };
   const submitProposal = async (event: React.FormEvent) => {
     event.preventDefault();
+    if (existingQuote?.status === 'accepted') {
+      setErrorMessage('Accepted proposals cannot be edited.');
+      return;
+    }
     const validationError = validate();
     if (validationError) {
       setErrorMessage(validationError);
@@ -148,6 +152,19 @@ export default function ContractorCostBreakdownModal({ project, existingQuote, i
     } finally { setSubmitting(false); }
   };
   if (!isOpen && mode === 'modal') return null;
+  if (existingQuote?.status === 'accepted') {
+    return (
+      <div className={mode === 'page' ? '' : 'fixed inset-0 z-[100] flex items-center justify-center bg-slate-950/60 p-3 sm:p-6'}>
+        <section className="w-full max-w-xl rounded-2xl border border-slate-200 bg-white p-6 shadow-xl">
+          <h2 className="text-lg font-bold text-slate-900">Proposal accepted</h2>
+          <p className="mt-2 text-sm text-slate-600">This proposal was accepted by the homeowner and can no longer be edited.</p>
+          <button type="button" onClick={onClose} className="mt-5 rounded-lg bg-slate-900 px-4 py-2 text-sm font-semibold text-white hover:bg-slate-800">
+            Back
+          </button>
+        </section>
+      </div>
+    );
+  }
   const input = (
     label: string,
     value: string,
