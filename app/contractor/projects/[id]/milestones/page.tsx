@@ -639,7 +639,7 @@ function ContractorMilestonesContent() {
                           {m.end_date && (
                             <span>Target: <strong className="text-slate-600">{formatDate(m.end_date)}</strong></span>
                           )}
-                          <span>Stage Allocation: <strong className="text-[#136F48]">{formatCurrency(m.amount)}</strong></span>
+                          <span>Stage Allocation: <strong className="text-[#136F48]">{formatCurrency(m.homeowner_total_amount ?? m.amount ?? 0)}</strong></span>
                         </div>
                       </div>
                     </div>

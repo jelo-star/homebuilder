@@ -261,7 +261,7 @@ function ContractorProjectOverviewContent() {
     );
   }
 
-  const agreedAmount = awardedQuote?.price || project.budget || project.est_mid || 0;
+  const agreedAmount = Number(project.homeowner_total_amount ?? awardedQuote?.price ?? project.budget ?? project.est_mid ?? 0);
   const projectRef = `PRJ-${project.id.slice(-6).toUpperCase()}`;
 
   // Derive 3 official statuses: Planning, Building, Complete
@@ -282,10 +282,10 @@ function ContractorProjectOverviewContent() {
   const totalMilestones = milestones.length;
   const completedMilestones = milestones.filter(m => m.status === 'paid' || m.status === 'approved').length;
   const pendingMilestones = totalMilestones - completedMilestones;
-  const totalAllocated = milestones.reduce((sum, m) => sum + Number(m.amount), 0);
+  const totalAllocated = milestones.reduce((sum, m) => sum + Number(m.homeowner_total_amount ?? m.amount ?? 0), 0);
   const totalPaid = milestones
     .filter(m => m.status === 'paid')
-    .reduce((sum, m) => sum + Number(m.amount), 0);
+    .reduce((sum, m) => sum + Number(m.homeowner_total_amount ?? m.amount ?? 0), 0);
   const remainingBalance = Math.max(0, agreedAmount - totalPaid);
 
   const progressPercent = totalMilestones > 0 ? Math.round((completedMilestones / totalMilestones) * 100) : 0;
