@@ -1,7 +1,9 @@
 -- LOCAL DEVELOPMENT ONLY. This script is destructive:
 -- it clears every row in public tables and all Supabase Auth users, then seeds
--- five contractor accounts, three homeowner accounts, contractor portfolios,
--- and three open projects. It preserves the schema and storage files.
+-- an admin account, five contractor accounts, three homeowner accounts,
+-- contractor portfolios with illustrative project images, contractor payout
+-- accounts, admin payment channels, license-document samples, and three open
+-- projects. It preserves the schema and storage files.
 --
 -- Login password for every account: 12341234
 -- Contractor emails are the first word of each business name @gmail.com.
@@ -73,6 +75,7 @@ begin
       ('stonebridge@gmail.com', 'contractor', 'Stonebridge Build Group', 'Davao City', '09170001003', 'Stonebridge Build Group'),
       ('cedarcrest@gmail.com', 'contractor', 'Cedarcrest Homes', 'Iloilo City', '09170001004', 'Cedarcrest Homes'),
       ('summitcraft@gmail.com', 'contractor', 'Summitcraft Builders', 'Antipolo', '09170001005', 'Summitcraft Builders'),
+      ('admin@gmail.com', 'admin', 'Platform Administrator', 'Manila', '09170003001', ''),
       ('home1@gmail.com', 'homeowner', 'Mara Santos', 'Quezon City', '09170002001', ''),
       ('home2@gmail.com', 'homeowner', 'Luis Dela Cruz', 'Cebu City', '09170002002', ''),
       ('home3@gmail.com', 'homeowner', 'Ana Villanueva', 'Davao City', '09170002003', '')
@@ -93,6 +96,7 @@ begin
     'stonebridge@gmail.com',
     'cedarcrest@gmail.com',
     'summitcraft@gmail.com',
+    'admin@gmail.com',
     'home1@gmail.com',
     'home2@gmail.com',
     'home3@gmail.com'
@@ -124,10 +128,19 @@ where lower(email) in (
   'stonebridge@gmail.com',
   'cedarcrest@gmail.com',
   'summitcraft@gmail.com',
+  'admin@gmail.com',
   'home1@gmail.com',
   'home2@gmail.com',
   'home3@gmail.com'
 );
+
+update public.profiles
+set
+  role = 'admin',
+  full_name = 'Platform Administrator',
+  city = 'Manila',
+  updated_at = now()
+where id = (select id from auth.users where lower(email) = 'admin@gmail.com');
 
 update public.contractor_profiles cp
 set
@@ -162,6 +175,32 @@ join (
 ) as seed(email, business_name, bio, years_experience, service_cities, specialties, trade_name, representative, phone, city, province, team_capacity)
   on lower(u.email) = seed.email
 where cp.profile_id = u.id;
+
+insert into public.contractor_documents (
+  contractor_id,
+  doc_type,
+  doc_title,
+  doc_number,
+  issuing_authority,
+  file_path,
+  status
+)
+select
+  u.id,
+  'license'::public.doc_type,
+  'Sample PCAB credential - not verified',
+  'SAMPLE-NOT-VALID-' || upper(split_part(u.email, '@', 1)),
+  'Sample document; not issued by a licensing authority',
+  '/demo-credentials/pcab-sample.png',
+  'pending'::public.verification_status
+from auth.users u
+where lower(u.email) in (
+  'northstar@gmail.com',
+  'harborline@gmail.com',
+  'stonebridge@gmail.com',
+  'cedarcrest@gmail.com',
+  'summitcraft@gmail.com'
+);
 
 insert into public.portfolio_items (
   contractor_id,
@@ -199,6 +238,155 @@ from (
     ('summitcraft@gmail.com', 'Kitchen and Living Renovation', 'A residential renovation updating the kitchen, shared living spaces, and finishes.', 'two_storey'::public.house_type, 2, 136.00::numeric, 2023)
 ) as seed(email, title, description, house_type, floors, floor_area_sqm, year_completed)
 join auth.users u on lower(u.email) = seed.email;
+
+insert into public.portfolio_images (
+  portfolio_item_id,
+  file_path,
+  sort_order
+)
+select
+  item.id,
+  seed.file_path,
+  1
+from (
+  values
+    ('northstar@gmail.com', 'Two-Storey Family Residence', 'https://images.unsplash.com/photo-1600585154340-be6161a56a0c?auto=format&fit=crop&w=1200&q=80'),
+    ('northstar@gmail.com', 'Compact City Bungalow', 'https://images.unsplash.com/photo-1600607687939-ce8a6c25118c?auto=format&fit=crop&w=1200&q=80'),
+    ('northstar@gmail.com', 'Expanded Family Home', 'https://images.unsplash.com/photo-1600596542815-ffad4c1539a9?auto=format&fit=crop&w=1200&q=80'),
+    ('harborline@gmail.com', 'Coastal Family Home', 'https://images.unsplash.com/photo-1580587771525-78b9dba3b914?auto=format&fit=crop&w=1200&q=80'),
+    ('harborline@gmail.com', 'Cebu Garden Bungalow', 'https://images.unsplash.com/photo-1600566753086-00f18fb6b3ea?auto=format&fit=crop&w=1200&q=80'),
+    ('harborline@gmail.com', 'Townhouse Interior Renewal', 'https://images.unsplash.com/photo-1600210492486-724fe5c67fb0?auto=format&fit=crop&w=1200&q=80'),
+    ('stonebridge@gmail.com', 'Davao Two-Storey Home', 'https://images.unsplash.com/photo-1600047509807-ba8f99d2cdde?auto=format&fit=crop&w=1200&q=80'),
+    ('stonebridge@gmail.com', 'Modern Townhouse Build', 'https://images.unsplash.com/photo-1600585152915-d208bec867a1?auto=format&fit=crop&w=1200&q=80'),
+    ('stonebridge@gmail.com', 'Residential Structural Upgrade', 'https://images.unsplash.com/photo-1600566752355-35792bedcfea?auto=format&fit=crop&w=1200&q=80'),
+    ('cedarcrest@gmail.com', 'Iloilo Starter Home', 'https://images.unsplash.com/photo-1512917774080-9991f1c4c750?auto=format&fit=crop&w=1200&q=80'),
+    ('cedarcrest@gmail.com', 'Two-Storey Courtyard House', 'https://images.unsplash.com/photo-1600607687920-4e2a09cf159d?auto=format&fit=crop&w=1200&q=80'),
+    ('cedarcrest@gmail.com', 'Home Extension and Renewal', 'https://images.unsplash.com/photo-1600566753190-17f0baa2a6c3?auto=format&fit=crop&w=1200&q=80'),
+    ('summitcraft@gmail.com', 'Rizal Hillside Residence', 'https://images.unsplash.com/photo-1613977257363-707ba9348227?auto=format&fit=crop&w=1200&q=80'),
+    ('summitcraft@gmail.com', 'Townhouse Family Build', 'https://images.unsplash.com/photo-1600585153490-76fb20a32601?auto=format&fit=crop&w=1200&q=80'),
+    ('summitcraft@gmail.com', 'Kitchen and Living Renovation', 'https://images.unsplash.com/photo-1600607688969-a5bfcd646154?auto=format&fit=crop&w=1200&q=80')
+) as seed(email, title, file_path)
+join auth.users u on lower(u.email) = seed.email
+join public.portfolio_items item
+  on item.contractor_id = u.id
+ and item.title = seed.title;
+
+insert into public.contractor_payout_accounts (
+  contractor_id,
+  payout_method,
+  bank_name,
+  account_name,
+  account_number_mask,
+  status,
+  is_primary
+)
+select
+  u.id,
+  payout.payout_method,
+  payout.bank_name,
+  'LOCAL TEST - ' || cp.business_name,
+  payout.account_number_mask,
+  'PENDING_VERIFICATION',
+  payout.is_primary
+from auth.users u
+join public.contractor_profiles cp on cp.profile_id = u.id
+cross join lateral (
+  values
+    ('bank_transfer', 'Local Test Bank', 'LOCAL-TEST-BANK-' || upper(split_part(u.email, '@', 1)), true),
+    ('gcash', 'GCash (Local Test)', 'LOCAL-TEST-GCASH-' || upper(split_part(u.email, '@', 1)), false),
+    ('maya', 'Maya (Local Test)', 'LOCAL-TEST-MAYA-' || upper(split_part(u.email, '@', 1)), false)
+) as payout(payout_method, bank_name, account_number_mask, is_primary)
+where lower(u.email) in (
+  'northstar@gmail.com',
+  'harborline@gmail.com',
+  'stonebridge@gmail.com',
+  'cedarcrest@gmail.com',
+  'summitcraft@gmail.com'
+);
+
+insert into public.payment_provider_configs (
+  provider_name,
+  display_name,
+  is_enabled,
+  environment,
+  transaction_fee_pct,
+  transaction_fee_fixed,
+  supports_automatic_disbursement,
+  metadata,
+  updated_by,
+  updated_at
+)
+select
+  provider.provider_name,
+  provider.display_name,
+  true,
+  'sandbox',
+  provider.transaction_fee_pct,
+  provider.transaction_fee_fixed,
+  provider.supports_automatic_disbursement,
+  '{"environment":"local-test","credentials_configured":false}'::jsonb,
+  admin_user.id,
+  now()
+from auth.users admin_user
+cross join (
+  values
+    ('gcash', 'GCash Wallet (Local Test)', 0.00::numeric, 0.00::numeric, false),
+    ('maya', 'Maya Wallet (Local Test)', 0.00::numeric, 0.00::numeric, false),
+    ('card_gateway', 'Card Gateway (Local Test)', 0.00::numeric, 0.00::numeric, false),
+    ('bank_transfer', 'Bank Transfer (Local Test)', 0.00::numeric, 0.00::numeric, false),
+    ('sandbox', 'Payment Sandbox', 0.00::numeric, 0.00::numeric, false)
+) as provider(provider_name, display_name, transaction_fee_pct, transaction_fee_fixed, supports_automatic_disbursement)
+where lower(admin_user.email) = 'admin@gmail.com'
+on conflict (provider_name) do update set
+  display_name = excluded.display_name,
+  is_enabled = excluded.is_enabled,
+  environment = excluded.environment,
+  transaction_fee_pct = excluded.transaction_fee_pct,
+  transaction_fee_fixed = excluded.transaction_fee_fixed,
+  supports_automatic_disbursement = excluded.supports_automatic_disbursement,
+  metadata = excluded.metadata,
+  updated_by = excluded.updated_by,
+  updated_at = now();
+
+insert into public.payment_methods (
+  code,
+  display_name,
+  category,
+  bank_or_provider_name,
+  account_holder_name,
+  account_number_or_id,
+  payment_instructions,
+  min_amount,
+  max_amount,
+  transaction_fee_pct,
+  transaction_fee_fixed,
+  is_active,
+  requires_proof,
+  requires_admin_verification,
+  sort_order,
+  updated_at
+)
+values
+  ('local_test_bank', 'Bank Transfer (Local Test)', 'bank_transfer', 'Local Test Bank', 'Platform Test Account', 'LOCAL-TEST-BANK-001', 'Local testing only. No real transfer or deposit can be made with this placeholder.', 1, 10000000, 0, 0, true, true, true, 1, now()),
+  ('local_test_gcash', 'GCash (Local Test)', 'ewallet', 'GCash (Local Test)', 'Platform Test Account', 'LOCAL-TEST-GCASH-001', 'Local testing only. This placeholder is not a payment destination.', 1, 1000000, 0, 0, true, true, true, 2, now()),
+  ('local_test_maya', 'Maya (Local Test)', 'ewallet', 'Maya (Local Test)', 'Platform Test Account', 'LOCAL-TEST-MAYA-001', 'Local testing only. This placeholder is not a payment destination.', 1, 1000000, 0, 0, true, true, true, 3, now()),
+  ('local_test_qrph', 'QR Ph (Local Test)', 'qr_ph', 'QR Ph (Local Test)', 'Platform Test Account', 'LOCAL-TEST-QRPH-001', 'Local testing only. No real QR payment is configured.', 1, 1000000, 0, 0, true, true, true, 4, now())
+on conflict (code) do update set
+  display_name = excluded.display_name,
+  category = excluded.category,
+  bank_or_provider_name = excluded.bank_or_provider_name,
+  account_holder_name = excluded.account_holder_name,
+  account_number_or_id = excluded.account_number_or_id,
+  payment_instructions = excluded.payment_instructions,
+  min_amount = excluded.min_amount,
+  max_amount = excluded.max_amount,
+  transaction_fee_pct = excluded.transaction_fee_pct,
+  transaction_fee_fixed = excluded.transaction_fee_fixed,
+  is_active = excluded.is_active,
+  requires_proof = excluded.requires_proof,
+  requires_admin_verification = excluded.requires_admin_verification,
+  sort_order = excluded.sort_order,
+  updated_at = now();
 
 insert into public.projects (
   homeowner_id,
@@ -249,9 +437,15 @@ join auth.users u on lower(u.email) = seed.email;
 
 do $$
 begin
-  if (select count(*) from auth.users) <> 8
+  if (select count(*) from auth.users) <> 9
     or (select count(*) from public.contractor_profiles) <> 5
+    or (select count(*) from public.contractor_documents where doc_type = 'license' and status = 'pending') <> 5
+    or (select count(*) from public.contractor_payout_accounts) <> 15
+    or (select count(*) from public.payment_provider_configs) <> 5
+    or (select count(*) from public.payment_methods) <> 4
     or (select count(*) from public.portfolio_items) <> 15
+    or (select count(*) from public.portfolio_images) <> 15
+    or (select count(*) from public.profiles where role = 'admin') <> 1
     or (select count(*) from public.profiles where role = 'homeowner') <> 3
     or (select count(*) from public.projects where status = 'open') <> 3
   then
@@ -264,7 +458,13 @@ commit;
 
 select
   (select count(*) from auth.users) as auth_accounts,
+  (select count(*) from public.profiles where role = 'admin') as admins,
   (select count(*) from public.contractor_profiles) as contractors,
+  (select count(*) from public.contractor_documents where doc_type = 'license') as sample_license_records,
+  (select count(*) from public.contractor_payout_accounts) as contractor_payout_methods,
+  (select count(*) from public.payment_provider_configs) as admin_payment_providers,
+  (select count(*) from public.payment_methods) as admin_payment_channels,
   (select count(*) from public.portfolio_items) as portfolio_items,
+  (select count(*) from public.portfolio_images) as portfolio_project_images,
   (select count(*) from public.profiles where role = 'homeowner') as homeowners,
   (select count(*) from public.projects where status = 'open') as projects_waiting_for_contractors;

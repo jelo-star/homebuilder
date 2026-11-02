@@ -22,7 +22,7 @@ demo_documents(id, doc_type, doc_title, doc_number, issuing_authority, file_path
       'Demo PCAB credential example (not a real license)',
       'DEMO-ONLY-NOT-A-VALID-PCAB-LICENSE',
       'None - demonstration only',
-      '/demo-credentials/pcab-sample.html'
+      '/demo-credentials/pcab-sample.png'
     ),
     (
       '36000000-0000-0000-0000-000000000002'::uuid,
@@ -30,7 +30,7 @@ demo_documents(id, doc_type, doc_title, doc_number, issuing_authority, file_path
       'Demo DTI / SEC business registration (not valid)',
       'DEMO-ONLY-NOT-A-VALID-BUSINESS-REGISTRATION',
       'None - demonstration only',
-      '/demo-credentials/business-registration-sample.html'
+      '/demo-credentials/business-registration-sample.png'
     ),
     (
       '36000000-0000-0000-0000-000000000003'::uuid,
@@ -38,7 +38,7 @@ demo_documents(id, doc_type, doc_title, doc_number, issuing_authority, file_path
       'Demo Mayor''s business permit (not valid)',
       'DEMO-ONLY-NOT-A-VALID-MAYORS-PERMIT',
       'None - demonstration only',
-      '/demo-credentials/mayors-permit-sample.html'
+      '/demo-credentials/mayors-permit-sample.png'
     ),
     (
       '36000000-0000-0000-0000-000000000004'::uuid,
@@ -46,7 +46,7 @@ demo_documents(id, doc_type, doc_title, doc_number, issuing_authority, file_path
       'Demo BIR certificate of registration (not valid)',
       'DEMO-ONLY-NOT-A-VALID-TIN',
       'None - demonstration only',
-      '/demo-credentials/bir-registration-sample.html'
+      '/demo-credentials/bir-registration-sample.png'
     )
 )
 insert into public.contractor_documents (

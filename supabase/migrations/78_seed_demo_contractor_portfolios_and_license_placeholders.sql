@@ -69,7 +69,7 @@ select
   'DEMO ONLY - sample license preview, not a real credential',
   'DEMO-ONLY-NOT-A-VALID-PCAB-LICENSE',
   'None - fictional demonstration data',
-  '/demo-credentials/pcab-sample.html',
+  '/demo-credentials/pcab-sample.png',
   'pending'::public.verification_status
 from demo_contractor
 join license_seed using (email)
