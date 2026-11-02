@@ -261,7 +261,7 @@ export default function HomeownerDashboard() {
                 Calculate building costs and post your residential project to receive bids from verified contractors.
               </p>
               <Link
-                href="/homeowner/cost-calculator"
+                href="/homeowner/projects/create"
                 className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-blue-600 text-white text-xs font-semibold hover:bg-blue-700"
               >
                 <Plus className="w-3.5 h-3.5" />
