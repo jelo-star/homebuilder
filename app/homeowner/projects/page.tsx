@@ -108,7 +108,7 @@ export default function HomeownerProjectsPage() {
           : null;
 
     let matchingProjectIds: string[] | null = null;
-    if (filter === 'quotes' || filter === 'projects') {
+    if (filter === 'quotes') {
       const ownerProjectResult = await fetchAllProjectIds((from, to) => supabase
         .from('projects')
         .select('id')
@@ -145,9 +145,7 @@ export default function HomeownerProjectsPage() {
       }
 
       const projectsWithQuotes = new Set(proposedProjectIds);
-      matchingProjectIds = filter === 'quotes'
-        ? [...projectsWithQuotes]
-        : ownerProjectResult.ids.filter(projectId => !projectsWithQuotes.has(projectId));
+      matchingProjectIds = [...projectsWithQuotes];
       if (matchingProjectIds.length === 0) {
         setProjects([]);
         setTotalCount(0);
