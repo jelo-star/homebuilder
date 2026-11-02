@@ -249,7 +249,7 @@ function ContractorProjectPlanContent() {
           seq: index + 1,
           name: m.name || '',
           description: m.description || '',
-          amount: Number(m.amount) || 0,
+          amount: Math.round(Number(m.amount) || 0),
           start_date: m.start_date || '',
           end_date: m.end_date || '',
         }));
@@ -280,10 +280,10 @@ function ContractorProjectPlanContent() {
   }, [projectId]);
 
   // Calculations
-  const agreedContractAmount = Number(project?.homeowner_total_amount ?? awardedQuote?.price ?? project?.budget ?? project?.est_mid ?? 0);
+  const agreedContractAmount = Math.round(Number(project?.homeowner_total_amount ?? awardedQuote?.price ?? project?.budget ?? project?.est_mid ?? 0));
   const totalAllocatedAmount = rows.reduce((sum, r) => sum + (Number(r.amount) || 0), 0);
   const remainingUnallocated = agreedContractAmount - totalAllocatedAmount;
-  const isExactlyMatched = Math.abs(remainingUnallocated) < 0.01;
+  const isExactlyMatched = remainingUnallocated === 0;
   const isFullyAllocated = isExactlyMatched;
   const isUnderAllocated = remainingUnallocated > 0.01;
   const isExceeded = remainingUnallocated < -0.01;
@@ -311,7 +311,7 @@ function ContractorProjectPlanContent() {
       prev.map(r => {
         if (r.id !== id) return r;
         if (field === 'amount') {
-          const num = Math.max(0, parseNumberInput(String(value)));
+          const num = Math.max(0, Math.round(parseNumberInput(String(value))));
           return { ...r, amount: num };
         }
         if (field === 'name') return { ...r, name: String(value) };
@@ -776,7 +776,7 @@ function ContractorProjectPlanContent() {
                           <span className="absolute left-3 top-1/2 -translate-y-1/2 font-bold text-slate-400">₱</span>
                           <input
                             type="text"
-                            inputMode="decimal"
+                            inputMode="numeric"
                             value={row.amount ? formatNumberInput(String(row.amount)) : ''}
                             onChange={e => handleUpdateRow(row.id, 'amount', formatNumberInput(e.target.value))}
                             disabled={isPlanApproved}
@@ -864,7 +864,7 @@ function ContractorProjectPlanContent() {
                             <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400 font-bold">₱</span>
                             <input
                               type="text"
-                              inputMode="decimal"
+                              inputMode="numeric"
                               value={row.amount ? formatNumberInput(String(row.amount)) : ''}
                               onChange={e => handleUpdateRow(row.id, 'amount', formatNumberInput(e.target.value))}
                               disabled={isPlanApproved}
