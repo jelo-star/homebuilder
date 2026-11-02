@@ -5,7 +5,8 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { createClient } from '@/lib/supabase/client';
 import { normalizeEmail } from '@/lib/utils/email';
-import { Building2, ArrowRight, Lock, Mail, User, Phone, MapPin, AlertCircle } from 'lucide-react';
+import AuthPageBackdrop from '@/components/auth/AuthPageBackdrop';
+import { House, ArrowRight, Lock, Mail, User, Phone, MapPin, AlertCircle, Home, Users, ShieldCheck } from 'lucide-react';
 
 export default function RegisterPage() {
   const router = useRouter();
@@ -68,64 +69,70 @@ export default function RegisterPage() {
     }
   };
 
-  return (
-    <main className="relative min-h-screen bg-slate-50 px-4 py-6 sm:px-8 lg:px-10 lg:py-4">
-      <Link
-        href="/"
-        className="absolute left-4 top-4 z-10 inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white/90 px-3.5 py-2.5 text-sm font-semibold text-slate-700 shadow-sm transition hover:-translate-y-0.5 hover:border-emerald-200 hover:text-emerald-800 sm:left-8 sm:top-8 lg:left-12"
-      >
-        <ArrowRight className="h-4 w-4 rotate-180" />
-        Back to home
-      </Link>
+  const registrationFeatures = [
+    { Icon: Home, label: 'Plan your project' },
+    { Icon: Users, label: 'Compare contractors' },
+    { Icon: ShieldCheck, label: 'Track the work' },
+  ];
 
-      <div className="mx-auto grid min-h-[calc(100vh-2rem)] max-w-7xl items-center gap-10 pt-16 lg:grid-cols-2 lg:gap-12 lg:pt-0">
-        <section className="hidden lg:block">
-          <Link href="/" className="mb-12 inline-flex items-center gap-3">
-            <span className="flex h-12 w-12 items-center justify-center rounded-2xl bg-emerald-700 text-white shadow-lg shadow-emerald-900/15">
-              <Building2 className="h-6 w-6" />
-            </span>
-            <span className="text-lg font-extrabold tracking-tight text-slate-900">HomeBuildr</span>
-          </Link>
+  return (
+    <main className="relative isolate min-h-screen overflow-hidden bg-slate-100 px-5 py-5 sm:px-8 lg:px-10">
+      <AuthPageBackdrop />
+      <div className="relative z-10 mx-auto flex w-full max-w-[1360px] items-center justify-between">
+        <Link href="/" className="inline-flex items-center gap-3 rounded-xl">
+          <span className="flex h-11 w-11 items-center justify-center text-emerald-800 sm:h-12 sm:w-12">
+            <House className="h-10 w-10 stroke-[2.4] sm:h-11 sm:w-11" />
+          </span>
+          <span className="text-lg font-extrabold tracking-tight text-slate-950 sm:text-xl">
+            HomeBuild<span className="text-emerald-700">r</span>
+          </span>
+        </Link>
+        <Link
+          href="/"
+          className="inline-flex items-center gap-2 rounded-full border border-white/80 bg-white/85 px-4 py-2.5 text-xs font-semibold text-slate-700 shadow-md shadow-slate-900/5 backdrop-blur transition hover:-translate-y-0.5 hover:text-emerald-800 sm:text-sm"
+        >
+          <ArrowRight className="h-4 w-4 rotate-180" />
+          Back to home
+        </Link>
+      </div>
+
+      <div className="relative z-10 mx-auto grid min-h-[calc(100vh-7rem)] w-full max-w-[1360px] items-center gap-8 py-8 lg:grid-cols-[minmax(0,1fr)_minmax(480px,0.82fr)] lg:gap-16 lg:py-0">
+        <section className="mx-auto w-full max-w-2xl lg:mx-0">
           <div className="max-w-xl">
-            <div className="mb-5 inline-flex items-center gap-2 rounded-full border border-emerald-100 bg-white px-3 py-1.5 text-xs font-semibold text-emerald-800 shadow-sm">
-              <Building2 className="h-4 w-4" />
+            <div className="mb-5 inline-flex items-center gap-2.5 rounded-full border border-emerald-200/70 bg-emerald-100/80 px-4 py-2 text-xs font-bold text-emerald-800 shadow-sm backdrop-blur">
+              <ShieldCheck className="h-5 w-5" />
               A trusted place to plan your next project
             </div>
-            <h1 className="text-5xl font-black leading-[1.08] tracking-tight text-slate-950 xl:text-6xl">
-              Start your home project,
-              <span className="mt-2 block text-emerald-700">with the right team.</span>
+            <h1 className="text-4xl font-black leading-[1.02] tracking-[-0.045em] text-slate-950 sm:text-5xl xl:text-[4.25rem]">
+              Your home project,
+              <span className="mt-1 block">
+                built with <span className="relative inline-block text-emerald-700">confidence<span aria-hidden="true" className="absolute -bottom-2 left-0 h-1 w-full -rotate-2 rounded-full bg-emerald-600" /></span>.
+              </span>
             </h1>
-            <p className="mt-6 max-w-lg text-base leading-7 text-slate-600">
-              Create an account to plan projects, connect with contractors, and keep every step organized in one workspace.
+            <p className="mt-6 max-w-lg text-base font-medium leading-7 text-slate-700 sm:text-lg">
+              Create an account to plan, compare, and work with verified contractors for your dream home.
             </p>
           </div>
-          <div className="mt-10 grid max-w-2xl grid-cols-3 gap-3">
-            {[
-              ['01', 'Plan your project'],
-              ['02', 'Compare contractors'],
-              ['03', 'Track the work'],
-            ].map(([step, label]) => (
-              <div key={step} className="rounded-2xl border border-slate-200/80 bg-white/80 p-4 shadow-sm">
-                <div className="text-[11px] font-bold tracking-widest text-emerald-700">{step}</div>
-                <div className="mt-2 text-xs font-semibold leading-5 text-slate-700">{label}</div>
+          <div className="mt-8 grid max-w-[390px] grid-cols-3 gap-3 sm:mt-10 sm:gap-5">
+            {registrationFeatures.map(({ Icon, label }) => (
+              <div key={label} className="flex aspect-square flex-col items-center justify-center gap-2 rounded-[1.4rem] border border-white/80 bg-white/85 px-2 py-3 text-center shadow-lg shadow-slate-900/10 backdrop-blur-md">
+                <Icon className="h-7 w-7 text-slate-950" aria-hidden="true" />
+                <span className="max-w-20 text-xs font-extrabold leading-tight text-slate-900">{label}</span>
               </div>
             ))}
           </div>
+          <p className="mt-8 hidden items-center gap-2 text-xs font-semibold text-slate-600 sm:flex">
+            <ShieldCheck className="h-6 w-6 fill-emerald-700 text-emerald-700 [&>path:last-child]:stroke-white" />
+            A trusted workspace for homeowners and contractors.
+          </p>
         </section>
 
-        <section className="mx-auto w-full max-w-2xl">
-          <div className="mb-7 text-center lg:hidden">
-            <Link href="/" className="inline-flex items-center gap-2.5">
-              <span className="flex h-11 w-11 items-center justify-center rounded-2xl bg-emerald-700 text-white shadow-lg shadow-emerald-900/15">
-                <Building2 className="h-5 w-5" />
-              </span>
-              <span className="text-lg font-extrabold tracking-tight text-slate-900">HomeBuildr</span>
-            </Link>
-          </div>
-
-          <div className="rounded-3xl border border-slate-200 bg-white p-5 shadow-xl shadow-slate-900/5 sm:p-7 lg:p-6">
+        <section className="mx-auto w-full max-w-[540px]">
+          <div className="rounded-[1.4rem] border border-white/90 bg-white/95 p-5 shadow-2xl shadow-slate-950/20 ring-1 ring-slate-900/5 backdrop-blur-xl sm:p-7 lg:p-6">
             <div className="mb-4">
-              <div className="mb-2 text-xs font-bold uppercase tracking-[0.18em] text-emerald-700">Join HomeBuildr</div>
+              <div className="mb-2 flex items-center gap-3 text-xs font-extrabold uppercase tracking-[0.16em] text-emerald-700">
+                Join HomeBuildr <span className="h-px w-12 bg-emerald-300" />
+              </div>
               <h2 className="text-2xl font-extrabold tracking-tight text-slate-950 sm:text-3xl">Create your account</h2>
               <p className="mt-1 text-sm leading-5 text-slate-500">Choose how you’ll use HomeBuildr and set up your account.</p>
             </div>

@@ -1,30 +1,80 @@
-﻿'use client';
+'use client';
 
 import React from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import Navbar from '@/components/ui/Navbar';
+import DreamHomeEstimator from '@/components/landing/DreamHomeEstimator';
 import { createClient } from '@/lib/supabase/client';
-import { formatCurrency } from '@/lib/utils/formatters';
-import { ArrowRight, Building2, Search, ShieldCheck, Star, Wrench } from 'lucide-react';
+import { ArrowRight, Check, MapPin, Search, ShieldCheck, Star } from 'lucide-react';
 
-type ContractorRecord = {
+type FeaturedContractor = {
   profile_id: string;
   business_name: string;
+  trade_name: string | null;
   bio: string | null;
+  years_experience: number | null;
   service_cities: string[] | null;
   work_types: string[] | null;
-  specialties: string[] | null;
+  business_address: string | null;
+  province: string | null;
   rating_avg: number | null;
   rating_count: number | null;
-  min_project_budget: number | null;
-  max_project_budget: number | null;
+  portfolio_count: number;
 };
 
 const services = [
-  { title: 'Renovation', subtitle: 'Refresh and improve your home', image: 'https://images.unsplash.com/photo-1556911220-e15b29be8c8f?auto=format&fit=crop&w=600&q=80', tag: 'renovation' },
-  { title: 'New Build', subtitle: 'Plan a new residential build', image: 'https://images.unsplash.com/photo-1600585154340-be6161a56a0c?auto=format&fit=crop&w=600&q=80', tag: 'new_build' },
-  { title: 'Extension', subtitle: 'Add space to your home', image: 'https://images.unsplash.com/photo-1618221195710-dd6b41faaea6?auto=format&fit=crop&w=600&q=80', tag: 'extension' },
+  {
+    title: 'Kitchen Renovation',
+    subtitle: 'Upgrade your kitchen with expert help.',
+    image: 'https://images.unsplash.com/photo-1556911220-e15b29be8c8f?auto=format&fit=crop&w=900&q=80',
+    filter: { key: 'service', value: 'renovation' },
+  },
+  {
+    title: 'House Construction',
+    subtitle: 'Build your dream home with confidence.',
+    image: 'https://images.unsplash.com/photo-1600585154340-be6161a56a0c?auto=format&fit=crop&w=900&q=80',
+    filter: { key: 'service', value: 'new_build' },
+  },
+  {
+    title: 'Interior Design',
+    subtitle: 'Create beautiful spaces for your family.',
+    image: 'https://images.unsplash.com/photo-1505693416388-ac5ce068fe85?auto=format&fit=crop&w=900&q=80',
+    filter: { key: 'search', value: 'interior design' },
+  },
+];
+
+const benefits = [
+  {
+    title: 'Verified Professionals',
+    text: 'Every profile is reviewed for quality, licensing and local experience before appearing on the platform.',
+  },
+  {
+    title: 'Clear Project Planning',
+    text: 'Compare quotes, track milestones and stay aligned with the right timeline and budget expectations.',
+  },
+  {
+    title: 'Trusted Local Experts',
+    text: 'Design and building specialists matched to your suburb, style and home improvement goals.',
+  },
+];
+
+const steps = [
+  {
+    number: '01',
+    title: 'Tell us about your project',
+    text: 'Share your goals, home type and budget to start with a clear brief.',
+  },
+  {
+    number: '02',
+    title: 'Compare trusted contractors',
+    text: 'Review experience, reviews and service fit before choosing the right team.',
+  },
+  {
+    number: '03',
+    title: 'Manage the build with confidence',
+    text: 'Track progress, approvals and milestones in one simple place from start to handover.',
+  },
 ];
 
 const workTypeOptions = [
@@ -33,72 +83,71 @@ const workTypeOptions = [
   { value: 'extension', label: 'Extension' },
 ] as const;
 
-const sampleBreakdown = [
-  { label: 'Site works & excavation', amount: 680000, percent: 16 },
-  { label: 'Structural works', amount: 1180000, percent: 28 },
-  { label: 'Finishes & fixtures', amount: 950000, percent: 23 },
-  { label: 'Electrical & plumbing', amount: 760000, percent: 18 },
-  { label: 'Project contingency', amount: 530000, percent: 13 },
-  { label: 'Permit & admin', amount: 240000, percent: 6 },
-];
-
-function formatBudget(min: number | null, max: number | null) {
-  if (min == null && max == null) return 'Contact for pricing';
-  const formattedMin = min == null ? 'Not specified' : formatCurrency(Number(min));
-  const formattedMax = max == null ? 'Not specified' : formatCurrency(Number(max));
-  return `${formattedMin} – ${formattedMax}`;
-}
-
 export default function HomePage() {
   const router = useRouter();
   const [service, setService] = React.useState('all');
   const [location, setLocation] = React.useState('');
-  const [featuredContractors, setFeaturedContractors] = React.useState<ContractorRecord[]>([]);
-  const [activeContractorCount, setActiveContractorCount] = React.useState<number | null>(null);
+  const [contractors, setContractors] = React.useState<FeaturedContractor[]>([]);
   const [contractorsLoading, setContractorsLoading] = React.useState(true);
   const [contractorsError, setContractorsError] = React.useState('');
-  const [contractorCountError, setContractorCountError] = React.useState(false);
 
   React.useEffect(() => {
     let active = true;
-    const loadHomeData = async () => {
+
+    const loadFeaturedContractors = async () => {
       const supabase = createClient();
-      const [contractorResult, contractorCountResult] = await Promise.all([
-        supabase
-          .from('contractor_directory')
-          .select('profile_id, business_name, bio, service_cities, work_types, specialties, rating_avg, rating_count, min_project_budget, max_project_budget')
-          .order('rating_avg', { ascending: false })
-          .limit(5),
-        supabase
-          .from('contractor_directory')
-          .select('profile_id', { count: 'exact', head: true }),
-      ]);
+      const { data, error } = await supabase
+        .from('contractor_directory')
+        .select('profile_id, business_name, trade_name, bio, years_experience, service_cities, work_types, business_address, province, rating_avg, rating_count')
+        .order('rating_avg', { ascending: false, nullsFirst: false })
+        .order('rating_count', { ascending: false })
+        .limit(3);
 
       if (!active) return;
 
-      if (contractorResult.error) {
+      if (error) {
         console.error(
-          `Unable to load featured contractor profiles (${contractorResult.error.code}): ${contractorResult.error.message}`,
-          contractorResult.error.details,
-          contractorResult.error.hint,
+          `Unable to load featured contractors (${error.code}): ${error.message}`,
+          error.details,
+          error.hint,
         );
-        setContractorsError(contractorResult.error.message);
-        setFeaturedContractors([]);
+        setContractorsError('Featured contractors could not be loaded. Please try again later.');
       } else {
-        setContractorsError('');
-        setFeaturedContractors((contractorResult.data ?? []) as ContractorRecord[]);
-      }
+        const portfolioCounts = await Promise.all(
+          (data ?? []).map(async (contractor) => {
+            const { count, error: countError } = await supabase
+              .from('portfolio_items')
+              .select('id', { count: 'exact', head: true })
+              .eq('contractor_id', contractor.profile_id);
 
-      if (contractorCountResult.error) {
-        setContractorCountError(true);
-      } else {
-        setActiveContractorCount(contractorCountResult.count ?? 0);
+            return { contractor, count, error: countError };
+          }),
+        );
+
+        if (!active) return;
+
+        const countFailure = portfolioCounts.find((result) => result.error);
+        if (countFailure?.error) {
+          console.error(
+            `Unable to load featured contractor portfolio count (${countFailure.error.code}): ${countFailure.error.message}`,
+            countFailure.error.details,
+            countFailure.error.hint,
+          );
+          setContractorsError('Featured contractor project counts could not be loaded. Please try again later.');
+        } else {
+          setContractors(
+            portfolioCounts.map(({ contractor, count }) => ({
+              ...contractor,
+              portfolio_count: count ?? 0,
+            })),
+          );
+        }
       }
 
       setContractorsLoading(false);
     };
 
-    void loadHomeData();
+    void loadFeaturedContractors();
     return () => {
       active = false;
     };
@@ -113,254 +162,296 @@ export default function HomePage() {
   };
 
   return (
-    <main className="min-h-screen bg-[#f5f5f2] text-slate-800">
+    <main className="min-h-screen bg-[#edf2ee] text-slate-800">
       <Navbar />
 
-      <section className="py-8 sm:py-10">
-        <div className="mx-auto grid max-w-[1200px] items-center gap-8 px-4 sm:px-6 lg:grid-cols-[1.04fr_1.08fr] lg:px-8">
-          <div className="max-w-[560px]">
-            <p className="text-[11px] font-bold uppercase tracking-[0.22em] text-[#136F48]">Your home. Your project. Your choice.</p>
-            <h1 className="mt-5 text-4xl font-extrabold leading-[0.94] tracking-[-0.04em] text-slate-900 sm:text-[4.2rem]">
-              Find a contractor for your next home project
-            </h1>
-            <p className="mt-5 max-w-[520px] text-lg leading-relaxed text-slate-600">
-              Browse contractor profiles, compare listed services and portfolios, and manage your project in one place.
-            </p>
-
-            <form onSubmit={handleSearch} className="mt-8 grid gap-3 rounded-[20px] border border-slate-200 bg-white p-3 shadow-sm sm:grid-cols-[1fr_1.1fr_auto]">
-              <label className="rounded-[14px] border border-slate-200 bg-slate-50 px-3 py-2">
-                <span className="mb-1 block text-[10px] font-bold uppercase tracking-[0.14em] text-slate-500">Service</span>
-                <select value={service} onChange={(event) => setService(event.target.value)} className="w-full bg-transparent text-sm text-slate-700 outline-none">
-                  <option value="all">All services</option>
-                  {workTypeOptions.map((option) => (
-                    <option key={option.value} value={option.value}>
-                      {option.label}
-                    </option>
-                  ))}
-                </select>
-              </label>
-
-              <label className="rounded-[14px] border border-slate-200 bg-slate-50 px-3 py-2">
-                <span className="mb-1 block text-[10px] font-bold uppercase tracking-[0.14em] text-slate-500">Service area</span>
-                <input
-                  value={location}
-                  onChange={(event) => setLocation(event.target.value)}
-                  placeholder="Enter a city or area"
-                  className="w-full bg-transparent text-sm text-slate-700 placeholder:text-slate-400 outline-none"
-                />
-              </label>
-
-              <button
-                type="submit"
-                className="inline-flex items-center justify-center gap-2 rounded-[14px] bg-[#136F48] px-5 py-3 text-sm font-bold text-white shadow-sm transition hover:bg-[#0f5738]"
-              >
-                <Search className="h-4 w-4" />
-                Search
-              </button>
-            </form>
-
-            <div className="mt-5 flex items-center justify-between rounded-[14px] border border-slate-200 bg-white px-4 py-3 shadow-sm">
-              <div className="flex items-center gap-2 text-xs font-semibold text-slate-500">
-                <Building2 className="h-4 w-4 text-[#136F48]" />
-                Approved contractors
+      <div className="w-full px-0 pt-0 pb-10">
+        <section
+          className="relative overflow-hidden bg-[#dfeee7] bg-cover bg-[center_55%]"
+          style={{
+            backgroundImage:
+              'url("https://images.unsplash.com/photo-1600585154340-be6161a56a0c?auto=format&fit=crop&w=2200&q=90")',
+          }}
+        >
+          <div
+            aria-hidden="true"
+            className="absolute inset-0 z-[1] bg-[#dfeee7]/40 lg:bg-[linear-gradient(90deg,rgba(223,238,231,0.84)_0%,rgba(223,238,231,0.72)_30%,rgba(223,238,231,0.52)_44%,rgba(223,238,231,0.24)_58%,rgba(223,238,231,0.04)_78%,rgba(223,238,231,0.02)_100%)]"
+          />
+          <div className="relative z-10 grid items-center gap-8 px-4 py-5 sm:px-6 lg:grid-cols-[1.06fr_1.14fr] lg:px-8 lg:py-8">
+            <div className="pl-0 lg:pl-2">
+              <div className="inline-flex items-center gap-2 rounded-full bg-white/60 px-3 py-2 text-[11px] font-semibold uppercase tracking-[0.2em] text-[#136F48] shadow-sm">
+                <span className="inline-flex h-5 w-5 items-center justify-center rounded-full bg-[#136F48] text-white">
+                  <Check className="h-3 w-3" />
+                </span>
+                Your Home. Your Project. Our Choice.
               </div>
-              <p className="text-xl font-extrabold text-slate-900">
-                {contractorCountError ? 'Unavailable' : activeContractorCount == null ? 'Loading…' : activeContractorCount.toLocaleString()}
+
+              <h1 className="mt-5 max-w-[560px] text-[3.2rem] font-extrabold leading-[0.88] tracking-[-0.06em] text-slate-900 sm:text-[4.5rem] lg:text-[5.2rem]">
+                Find a contractor for your next home project
+              </h1>
+
+              <p className="mt-5 max-w-[500px] text-[1.1rem] leading-relaxed text-slate-700">
+                Browse contractor profiles, compare listed services and portfolios, and manage your project in one place.
               </p>
-            </div>
-          </div>
 
-          <div className="relative overflow-hidden rounded-[30px] border border-slate-200 bg-white shadow-[0_28px_50px_rgba(15,23,42,0.12)]">
-            <div
-              aria-hidden="true"
-              className="h-[360px] w-full bg-cover bg-center sm:h-[430px]"
-              style={{ backgroundImage: 'url("https://images.unsplash.com/photo-1600585154340-be6161a56a0c?auto=format&fit=crop&w=1200&q=80")' }}
-            />
-            <div className="absolute inset-x-5 bottom-5 rounded-[22px] bg-white/95 p-4 shadow-lg backdrop-blur-sm">
-              <p className="text-[15px] font-extrabold text-slate-900">Explore contractor profiles</p>
-              <p className="mt-1 text-xs leading-relaxed text-slate-600">
-                {contractorsError
-                  ? 'Contractor data is unavailable right now.'
-                  : contractorsLoading
-                    ? 'Loading approved contractor profiles…'
-                    : `${featuredContractors.length} featured profile${featuredContractors.length === 1 ? '' : 's'} currently shown below.`}
-              </p>
-            </div>
-          </div>
-        </div>
-      </section>
+              <form onSubmit={handleSearch} className="mt-8 flex flex-col gap-3 rounded-[20px] bg-white/65 p-3 shadow-sm backdrop-blur-sm md:flex-row md:items-center">
+                <label className="flex min-w-[180px] items-center gap-2 rounded-[14px] border border-slate-200 bg-white/80 px-3 py-3 text-sm text-slate-700 shadow-sm">
+                  <span className="text-[10px] font-bold uppercase tracking-[0.18em] text-slate-500">Service</span>
+                  <select
+                    value={service}
+                    onChange={(event) => setService(event.target.value)}
+                    className="w-full bg-transparent text-sm font-medium text-slate-700 outline-none"
+                  >
+                    <option value="all">All services</option>
+                    {workTypeOptions.map((option) => (
+                      <option key={option.value} value={option.value}>{option.label}</option>
+                    ))}
+                  </select>
+                </label>
 
-      <section className="pb-10 pt-2">
-        <div className="mx-auto max-w-[1200px] px-4 sm:px-6 lg:px-8">
-          <p className="text-sm text-slate-600">Estimate details are calculated from current project assumptions for planning purposes.</p>
+                <label className="flex min-w-[210px] flex-1 items-center gap-2 rounded-[14px] border border-slate-200 bg-white/80 px-3 py-3 text-sm text-slate-700 shadow-sm">
+                  <span className="text-[10px] font-bold uppercase tracking-[0.18em] text-slate-500">Service Area</span>
+                  <input
+                    value={location}
+                    onChange={(event) => setLocation(event.target.value)}
+                    placeholder="Enter a city or area"
+                    className="w-full bg-transparent text-sm text-slate-700 placeholder:text-slate-400 outline-none"
+                  />
+                </label>
 
-          <div className="mt-5 rounded-[22px] border border-slate-200 bg-slate-50 p-5 shadow-sm">
-            <div className="grid gap-4 md:grid-cols-3">
-              <label className="rounded-[14px] border border-slate-200 bg-white px-3 py-2">
-                <span className="mb-1 block text-[10px] font-bold uppercase tracking-[0.14em] text-slate-500">Project type</span>
-                <select className="w-full bg-transparent text-base text-slate-700 outline-none" defaultValue="new_build">
-                  <option value="new_build">New build</option>
-                  <option value="renovation">Renovation</option>
-                  <option value="extension">Extension</option>
-                </select>
-              </label>
+                <button
+                  type="submit"
+                  className="inline-flex items-center justify-center gap-2 rounded-[14px] bg-[#136F48] px-5 py-3 text-sm font-bold text-white shadow-[0_8px_18px_rgba(19,111,72,0.28)] transition hover:bg-[#0f5738]"
+                >
+                  <Search className="h-4 w-4" />
+                  Search
+                </button>
+              </form>
 
-              <label className="rounded-[14px] border border-slate-200 bg-white px-3 py-2">
-                <span className="mb-1 block text-[10px] font-bold uppercase tracking-[0.14em] text-slate-500">Floor area (m²)</span>
-                <input defaultValue={120} className="w-full bg-transparent text-base text-slate-700 outline-none" />
-              </label>
-
-              <label className="rounded-[14px] border border-slate-200 bg-white px-3 py-2">
-                <span className="mb-1 block text-[10px] font-bold uppercase tracking-[0.14em] text-slate-500">Number of floors</span>
-                <select className="w-full bg-transparent text-base text-slate-700 outline-none" defaultValue={2}>
-                  <option value={1}>1</option>
-                  <option value={2}>2</option>
-                </select>
-              </label>
-
-              <label className="rounded-[14px] border border-slate-200 bg-white px-3 py-2">
-                <span className="mb-1 block text-[10px] font-bold uppercase tracking-[0.14em] text-slate-500">Finish level</span>
-                <select className="w-full bg-transparent text-base text-slate-700 outline-none" defaultValue="standard">
-                  <option value="basic">Basic</option>
-                  <option value="standard">Standard</option>
-                  <option value="premium">Premium</option>
-                </select>
-              </label>
-
-              <label className="rounded-[14px] border border-slate-200 bg-white px-3 py-2 md:col-span-1">
-                <span className="mb-1 block text-[10px] font-bold uppercase tracking-[0.14em] text-slate-500">City</span>
-                <input defaultValue="qwe" className="w-full bg-transparent text-base text-slate-700 outline-none" />
-              </label>
-
-              <label className="rounded-[14px] border border-slate-200 bg-white px-3 py-2 md:col-span-1">
-                <span className="mb-1 block text-[10px] font-bold uppercase tracking-[0.14em] text-slate-500">Region</span>
-                <select className="w-full bg-transparent text-base text-slate-700 outline-none" defaultValue="Region IV-B - MIMAROPA">
-                  <option value="Region IV-B - MIMAROPA">Region IV-B - MIMAROPA</option>
-                  <option value="NCR">NCR</option>
-                  <option value="Region III">Region III</option>
-                </select>
-              </label>
-            </div>
-
-            <button
-              type="button"
-              className="mt-5 inline-flex items-center gap-2 rounded-[14px] bg-[#136F48] px-5 py-3 text-sm font-bold text-white shadow-sm transition hover:bg-[#0f5738]"
-            >
-              <Wrench className="h-4 w-4" />
-              Calculate estimate
-            </button>
-          </div>
-
-          <div className="mt-5 rounded-[22px] border border-slate-200 bg-white p-5 shadow-sm">
-            <p className="text-[11px] font-bold uppercase tracking-[0.2em] text-[#136F48]">Preliminary estimate range</p>
-            <p className="mt-3 text-3xl font-extrabold tracking-[-0.04em] text-[#136F48] sm:text-[2.6rem]">₱3,420,000.00 – ₱4,800,000.00</p>
-            <p className="mt-3 text-base text-slate-600">Base estimate: ₱4,140,000.00</p>
-
-            <div className="mt-5 border-t border-slate-200 pt-5">
-              <div className="grid gap-4 md:grid-cols-3">
-                {sampleBreakdown.map((item) => (
-                  <div key={item.label} className="rounded-[14px] border border-slate-200 bg-slate-50 p-3">
-                    <div className="flex items-center justify-between gap-3 text-sm">
-                      <span className="font-medium text-slate-700">{item.label}</span>
-                      <span className="font-semibold text-slate-900">{item.percent}%</span>
-                    </div>
-                    <div className="mt-2 h-2 w-full overflow-hidden rounded-full bg-slate-200">
-                      <div className="h-full rounded-full bg-[#136F48]" style={{ width: `${item.percent}%` }} />
-                    </div>
-                    <p className="mt-2 text-sm font-bold text-slate-900">₱{item.amount.toLocaleString('en-PH', { maximumFractionDigits: 0 })}</p>
+              <div className="mt-6 grid gap-3 sm:grid-cols-3">
+                {['Trusted Contractors', 'Secure & Reliable', 'Manage Projects'].map((item) => (
+                  <div key={item} className="inline-flex items-center gap-2 rounded-full border border-[#dfeee7] bg-white/55 px-3 py-2 text-sm font-medium text-slate-700 shadow-sm">
+                    <ShieldCheck className="h-4 w-4 text-[#136F48]" />
+                    {item}
                   </div>
                 ))}
               </div>
-            </div>
-
-            <p className="mt-5 text-xs text-slate-500">Note: This is only an estimate. Final pricing should be confirmed with the chosen contractor and project scope.</p>
-          </div>
-        </div>
-      </section>
-
-      <section className="pb-10 pt-4">
-        <div className="mx-auto max-w-[1200px] px-4 sm:px-6 lg:px-8">
-          <div className="mb-6 flex items-end justify-between gap-4">
-            <div>
-              <h2 className="text-[2rem] font-extrabold leading-tight tracking-[-0.04em] text-slate-900">Popular home services</h2>
-              <p className="mt-1 text-sm text-slate-600">Explore work types available in the contractor directory.</p>
-            </div>
-            <Link href="/contractors" className="inline-flex items-center gap-1 text-sm font-bold text-[#136F48]">
-              All contractors <ArrowRight className="h-4 w-4" />
-            </Link>
-          </div>
-
-          <div className="grid gap-4 sm:grid-cols-3">
-            {services.map((item) => (
               <Link
-                key={item.tag}
-                href={`/contractors?service=${item.tag}`}
-                className="group overflow-hidden rounded-[18px] border border-slate-200 bg-white transition hover:border-emerald-300 hover:shadow-md"
+                href="#estimate"
+                className="mt-6 inline-flex items-center gap-2 rounded-xl bg-[#136F48] px-5 py-3 text-sm font-bold text-white shadow-sm transition-colors hover:bg-[#0f5a3b]"
               >
-                <div
-                  aria-hidden="true"
-                  className="h-[220px] w-full bg-cover bg-center transition duration-300 group-hover:scale-[1.02]"
-                  style={{ backgroundImage: `url("${item.image}")` }}
-                />
-                <div className="p-4">
-                  <h3 className="text-xl font-bold text-slate-900">{item.title}</h3>
-                  <p className="mt-1 text-sm text-slate-600">{item.subtitle}</p>
-                </div>
+                Estimate your dream home
+                <ArrowRight className="h-4 w-4" />
               </Link>
-            ))}
-          </div>
-        </div>
-      </section>
+            </div>
 
-      <section className="pb-10">
-        <div className="mx-auto max-w-[1200px] px-4 sm:px-6 lg:px-8">
-          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-            {featuredContractors.slice(0, 3).map((contractor) => (
-              <article key={contractor.profile_id} className="rounded-[18px] border border-slate-200 bg-white p-5 shadow-sm">
-                <div className="flex items-start gap-3">
-                  <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-emerald-50 text-[#136F48]">
-                    <Building2 className="h-5 w-5" />
-                  </div>
-                  <div className="min-w-0">
-                    <h3 className="truncate text-lg font-extrabold text-slate-900">{contractor.business_name}</h3>
-                    <div className="mt-1 flex items-center gap-1 text-xs text-emerald-800">
-                      <ShieldCheck className="h-3.5 w-3.5" />
-                      Approved contractor
+            <div aria-hidden="true" className="hidden min-h-[420px] lg:block" />
+          </div>
+        </section>
+
+        <section className="bg-[#f5f8f5] px-4 py-12 sm:px-6 lg:px-8">
+          <div className="text-center">
+            <h2 className="text-[2.5rem] font-extrabold leading-tight tracking-[-0.06em] text-slate-900">Popular Home Services</h2>
+            <p className="mt-2 text-base text-slate-600">Explore work types available in the contractor directory.</p>
+          </div>
+
+          <div className="mt-8 grid gap-5 md:grid-cols-3">
+            {services.map((item) => {
+              const query = new URLSearchParams({ [item.filter.key]: item.filter.value });
+
+              return (
+                <Link
+                  key={item.title}
+                  href={`/contractors?${query.toString()}`}
+                  className="group overflow-hidden rounded-[24px] border border-slate-200 bg-white shadow-[0_10px_24px_rgba(15,23,42,0.06)] transition hover:-translate-y-1 hover:shadow-[0_18px_36px_rgba(15,23,42,0.10)]"
+                >
+                  <div className="relative h-[290px] overflow-hidden">
+                    <div
+                      aria-hidden="true"
+                      className="absolute inset-0 bg-cover bg-center transition duration-500 group-hover:scale-[1.04]"
+                      style={{ backgroundImage: `url("${item.image}")` }}
+                    />
+                    <div className="absolute inset-0 bg-gradient-to-t from-[#0f172a]/15 via-transparent to-transparent" />
+                    <div className="absolute left-4 top-4 rounded-full border border-white/40 bg-white/70 px-3 py-1 text-xs font-semibold uppercase tracking-[0.12em] text-slate-700 backdrop-blur-sm">
+                      {item.title}
                     </div>
                   </div>
-                </div>
 
-                {contractor.bio && <p className="mt-4 line-clamp-2 text-sm leading-relaxed text-slate-600">{contractor.bio}</p>}
+                  <div className="flex items-center justify-between gap-3 px-5 py-4">
+                    <div>
+                      <h3 className="text-[1.2rem] font-extrabold tracking-[-0.04em] text-slate-900">{item.title}</h3>
+                      <p className="mt-1 text-sm text-slate-600">{item.subtitle}</p>
+                    </div>
 
-                <div className="mt-4 flex flex-wrap gap-2">
-                  {(contractor.work_types ?? []).map((type) => (
-                    <span key={type} className="rounded-full bg-slate-100 px-2.5 py-1 text-xs capitalize text-slate-700">
-                      {type.replaceAll('_', ' ')}
+                    <span className="flex h-10 w-10 items-center justify-center rounded-full bg-[#edf4ef] text-[#136F48]">
+                      <ArrowRight className="h-4 w-4" />
                     </span>
-                  ))}
-                </div>
-
-                <div className="mt-4 space-y-2 border-t border-slate-100 pt-4 text-xs text-slate-600">
-                  {Number(contractor.rating_count ?? 0) > 0 ? (
-                    <div className="flex items-center gap-1">
-                      <Star className="h-4 w-4 fill-amber-400 text-amber-400" />
-                      {Number(contractor.rating_avg ?? 0).toFixed(1)} ({contractor.rating_count} reviews)
-                    </div>
-                  ) : (
-                    <p>No reviews yet</p>
-                  )}
-                  <p>{contractor.service_cities?.length ? contractor.service_cities.join(', ') : 'Service areas not listed'}</p>
-                  <p>{formatBudget(contractor.min_project_budget, contractor.max_project_budget)}</p>
-                </div>
-
-                <Link href={`/contractors/${contractor.profile_id}`} className="mt-5 inline-flex items-center gap-2 text-sm font-bold text-[#136F48] hover:underline">
-                  View profile <ArrowRight className="h-4 w-4" />
+                  </div>
                 </Link>
-              </article>
-            ))}
+              );
+            })}
+          </div>
+        </section>
+
+        <section className="bg-white px-4 py-12 sm:px-6 lg:px-8">
+          <div className="mx-auto max-w-[1320px]">
+            <div className="flex flex-col gap-3 text-center">
+              <p className="text-xs font-bold uppercase tracking-[0.2em] text-[#136F48]">Trusted by homeowners</p>
+              <h2 className="text-[2.4rem] font-extrabold leading-tight tracking-[-0.06em] text-slate-900">Professional contractors built for serious projects</h2>
+            </div>
+
+            {contractorsLoading ? (
+              <p className="mt-8 text-center text-sm text-slate-600">Loading contractor profiles…</p>
+            ) : contractorsError ? (
+              <p role="alert" className="mt-8 text-center text-sm text-red-700">{contractorsError}</p>
+            ) : contractors.length === 0 ? (
+              <p className="mt-8 text-center text-sm text-slate-600">No approved contractor profiles are available yet.</p>
+            ) : (
+              <div className="mx-auto mt-8 grid w-full max-w-4xl gap-4 md:grid-cols-2">
+                {contractors.map((contractor) => {
+                  const name = contractor.business_name.trim() || contractor.trade_name?.trim() || 'Contractor';
+                  const contractorServices = (contractor.work_types ?? [])
+                    .map((workType) => workType.replace(/_/g, ' ').replace(/\b\w/g, (letter) => letter.toUpperCase()));
+                  const services = contractorServices.slice(0, 2);
+                  const additionalServices = contractorServices.length - services.length;
+                  const serviceLocation = contractor.service_cities?.find((city) => city.trim() && !city.includes('@'));
+                  const businessLocation = [contractor.business_address, contractor.province]
+                    .filter((part): part is string => Boolean(part?.trim()) && !part?.includes('@'))
+                    .join(', ');
+                  const location = serviceLocation || businessLocation || 'Location not listed';
+                  return (
+                    <article key={contractor.profile_id} className="group grid h-full grid-cols-1 content-start gap-x-5 rounded-xl border border-slate-200 bg-white p-4 shadow-[0_6px_18px_rgba(15,23,42,0.035)] transition duration-200 hover:border-[#b8d7c6] hover:shadow-[0_12px_26px_rgba(15,23,42,0.07)] md:grid-cols-2">
+                      <div className="flex items-start justify-between gap-3 border-b border-slate-100 pb-3 md:col-span-2">
+                        <div className="flex min-w-0 items-center gap-3">
+                          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg border border-[#d6e8de] bg-[#f0f7f3] text-base font-bold text-[#136F48]">
+                            {name.slice(0, 1).toUpperCase()}
+                          </div>
+                          <div className="min-w-0">
+                            <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-slate-500">Approved contractor</p>
+                            <h3 className="mt-1 truncate text-lg font-bold tracking-[-0.03em] text-slate-900">{name}</h3>
+                          </div>
+                        </div>
+                        {contractor.rating_count ? (
+                          <div className="inline-flex shrink-0 items-center gap-1.5 rounded-lg border border-slate-200 bg-slate-50 px-2.5 py-1.5 text-xs font-semibold text-slate-700" aria-label={`${Number(contractor.rating_avg ?? 0).toFixed(1)} out of 5 from ${contractor.rating_count} reviews`}>
+                            <Star className="h-3.5 w-3.5 fill-amber-400 text-amber-500" />
+                            {Number(contractor.rating_avg ?? 0).toFixed(1)}
+                            <span className="font-normal text-slate-500">({contractor.rating_count})</span>
+                          </div>
+                        ) : null}
+                      </div>
+
+                      <div className="mt-3 md:col-span-2">
+                        <p className="text-xs font-semibold uppercase tracking-[0.12em] text-slate-500">Services</p>
+                        <div className="mt-2 flex min-h-7 flex-wrap items-center gap-2">
+                          {services.length > 0 ? services.map((item) => (
+                            <span key={item} className="rounded-md border border-slate-200 bg-slate-50 px-2.5 py-1 text-xs font-medium text-slate-700">
+                              {item}
+                            </span>
+                          )) : (
+                            <span className="text-sm font-medium text-slate-600">Services not listed</span>
+                          )}
+                          {additionalServices > 0 && (
+                            <span className="rounded-md border border-slate-200 bg-white px-2.5 py-1 text-xs font-medium text-slate-500">
+                              +{additionalServices} more
+                            </span>
+                          )}
+                        </div>
+                      </div>
+
+                      <div className="mt-3 grid gap-3 border-t border-slate-100 pt-3 sm:grid-cols-2 md:col-span-2">
+                        <div className="min-w-0">
+                          <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-slate-500">Service location</p>
+                          <p className="mt-1.5 flex items-start gap-2 text-sm leading-5 text-slate-700">
+                            <MapPin className="mt-0.5 h-4 w-4 shrink-0 text-[#136F48]" />
+                            <span className="line-clamp-2">{location}</span>
+                          </p>
+                        </div>
+                        <div>
+                          <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-slate-500">Industry experience</p>
+                          <p className="mt-1.5 text-sm font-medium text-slate-700">
+                            {contractor.years_experience != null
+                              ? `${contractor.years_experience} ${contractor.years_experience === 1 ? 'year' : 'years'}`
+                              : 'Not provided'}
+                          </p>
+                        </div>
+                      </div>
+
+                      <div className="mt-3 flex items-center justify-between gap-3 border-t border-slate-200 pt-3 md:col-span-2">
+                        <div>
+                          <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-slate-500">Portfolio</p>
+                          <p className="mt-1 text-sm font-semibold text-slate-800">
+                            {contractor.portfolio_count} {contractor.portfolio_count === 1 ? 'project' : 'projects'}
+                          </p>
+                        </div>
+                        <Link href={`/contractors/${contractor.profile_id}`} className="inline-flex min-h-10 items-center justify-center gap-2 rounded-lg border border-[#136F48] bg-[#136F48] px-4 py-2 text-sm font-semibold text-white transition hover:border-[#0f5738] hover:bg-[#0f5738] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#136F48]">
+                          View company
+                          <ArrowRight className="h-4 w-4" />
+                        </Link>
+                      </div>
+                    </article>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        </section>
+
+        <section className="bg-[#f4f7f4] px-4 py-12 sm:px-6 lg:px-8">
+          <div className="mx-auto max-w-[1320px]">
+            <div className="text-center">
+              <h2 className="text-[2.4rem] font-extrabold leading-tight tracking-[-0.06em] text-slate-900">Why homeowners choose HomeBuilder</h2>
+            </div>
+
+            <div className="mt-8 grid gap-5 md:grid-cols-3">
+              {benefits.map((benefit) => (
+                <div key={benefit.title} className="rounded-[22px] border border-slate-200 bg-white p-6 shadow-[0_12px_28px_rgba(15,23,42,0.04)]">
+                  <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-[#eaf4ee] text-[#136F48]">
+                    <ShieldCheck className="h-5 w-5" />
+                  </div>
+                  <h3 className="mt-5 text-[1.45rem] font-extrabold tracking-[-0.04em] text-slate-900">{benefit.title}</h3>
+                  <p className="mt-3 text-base leading-relaxed text-slate-600">{benefit.text}</p>
+                </div>
+              ))}
+            </div>
+          </div>
+        </section>
+
+        <section className="bg-[#edf4f0] px-4 py-12 sm:px-6 lg:px-8">
+          <div className="mx-auto max-w-[1320px]">
+            <div className="text-center">
+              <p className="text-xs font-bold uppercase tracking-[0.2em] text-[#136F48]">How it works</p>
+              <h2 className="mt-2 text-[2.4rem] font-extrabold leading-tight tracking-[-0.06em] text-slate-900">A simple way to plan your home project</h2>
+            </div>
+
+            <div className="mt-8 grid gap-5 md:grid-cols-3">
+              {steps.map((step) => (
+                <div key={step.number} className="rounded-[22px] border border-slate-200 bg-white p-6 shadow-[0_12px_28px_rgba(15,23,42,0.04)]">
+                  <span className="text-sm font-bold uppercase tracking-[0.2em] text-[#136F48]">{step.number}</span>
+                  <h3 className="mt-4 text-[1.5rem] font-extrabold tracking-[-0.04em] text-slate-900">{step.title}</h3>
+                  <p className="mt-3 text-base leading-relaxed text-slate-600">{step.text}</p>
+                </div>
+              ))}
+            </div>
+          </div>
+        </section>
+
+        <DreamHomeEstimator />
+      </div>
+
+      <footer className="bg-[#0f172a] px-4 py-8 text-slate-200 sm:px-6 lg:px-8">
+        <div className="mx-auto flex max-w-[1320px] flex-col gap-6 md:flex-row md:items-center md:justify-between">
+          <div>
+            <p className="text-[1.6rem] font-extrabold tracking-[-0.05em] text-white">HomeBuilder</p>
+            <p className="mt-2 text-sm text-slate-300">New builds, renovations and trusted local experts for every stage of your project.</p>
+          </div>
+
+          <div className="flex flex-wrap items-center gap-5 text-sm text-slate-300">
+            <Link href="/contractors" className="transition hover:text-white">Contractors</Link>
+            <Link href="/#estimate" className="transition hover:text-white">Cost Calculator</Link>
+            <Link href="/login" className="transition hover:text-white">Login</Link>
           </div>
         </div>
-      </section>
+      </footer>
     </main>
   );
 }

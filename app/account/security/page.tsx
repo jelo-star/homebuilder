@@ -48,6 +48,11 @@ export default function AccountSecurityPage() {
           throw new Error('Your account role could not be verified.');
         }
 
+        if (profile.role === 'homeowner') {
+          router.replace('/homeowner/profile#security');
+          return;
+        }
+
         if (active) {
           setRole(profile.role as UserRole);
           setEmail(user.email);

@@ -9,6 +9,42 @@ import {
 } from '@/types/database';
 import { getRegionCodeForProvince } from './philippines';
 
+const FALLBACK_BENCHMARKS: Pick<
+  ConstructionBenchmark,
+  | 'project_type'
+  | 'house_type'
+  | 'finish_level'
+  | 'rate_low'
+  | 'rate_base'
+  | 'rate_high'
+  | 'contingency_pct'
+  | 'contractor_overhead_profit_pct'
+  | 'vat_pct'
+  | 'source_notes'
+>[] = [
+  { project_type: 'new_build', house_type: 'one_storey', finish_level: 'basic', rate_low: 21000, rate_base: 24000, rate_high: 27500, contingency_pct: 8, contractor_overhead_profit_pct: 15, vat_pct: 12, source_notes: 'Basic one-storey construction baseline.' },
+  { project_type: 'new_build', house_type: 'one_storey', finish_level: 'standard', rate_low: 26000, rate_base: 31000, rate_high: 36000, contingency_pct: 10, contractor_overhead_profit_pct: 15, vat_pct: 12, source_notes: 'Standard one-storey construction baseline.' },
+  { project_type: 'new_build', house_type: 'one_storey', finish_level: 'premium', rate_low: 36000, rate_base: 44000, rate_high: 52000, contingency_pct: 12, contractor_overhead_profit_pct: 18, vat_pct: 12, source_notes: 'Premium one-storey construction baseline.' },
+  { project_type: 'new_build', house_type: 'two_storey', finish_level: 'basic', rate_low: 23000, rate_base: 26500, rate_high: 30500, contingency_pct: 8, contractor_overhead_profit_pct: 15, vat_pct: 12, source_notes: 'Basic two-storey construction baseline.' },
+  { project_type: 'new_build', house_type: 'two_storey', finish_level: 'standard', rate_low: 28500, rate_base: 34500, rate_high: 40000, contingency_pct: 10, contractor_overhead_profit_pct: 15, vat_pct: 12, source_notes: 'Standard two-storey construction baseline.' },
+  { project_type: 'new_build', house_type: 'two_storey', finish_level: 'premium', rate_low: 40000, rate_base: 49000, rate_high: 58000, contingency_pct: 12, contractor_overhead_profit_pct: 18, vat_pct: 12, source_notes: 'Premium two-storey construction baseline.' },
+  { project_type: 'new_build', house_type: 'townhouse', finish_level: 'basic', rate_low: 20500, rate_base: 23500, rate_high: 27000, contingency_pct: 8, contractor_overhead_profit_pct: 15, vat_pct: 12, source_notes: 'Basic townhouse construction baseline.' },
+  { project_type: 'new_build', house_type: 'townhouse', finish_level: 'standard', rate_low: 25500, rate_base: 30000, rate_high: 35000, contingency_pct: 10, contractor_overhead_profit_pct: 15, vat_pct: 12, source_notes: 'Standard townhouse construction baseline.' },
+  { project_type: 'new_build', house_type: 'townhouse', finish_level: 'premium', rate_low: 35000, rate_base: 43000, rate_high: 51000, contingency_pct: 12, contractor_overhead_profit_pct: 18, vat_pct: 12, source_notes: 'Premium townhouse construction baseline.' },
+  { project_type: 'renovation', house_type: 'one_storey', finish_level: 'basic', rate_low: 11000, rate_base: 14000, rate_high: 17500, contingency_pct: 12, contractor_overhead_profit_pct: 15, vat_pct: 12, source_notes: 'Basic one-storey renovation baseline.' },
+  { project_type: 'renovation', house_type: 'one_storey', finish_level: 'standard', rate_low: 14000, rate_base: 18000, rate_high: 22000, contingency_pct: 12, contractor_overhead_profit_pct: 15, vat_pct: 12, source_notes: 'Standard one-storey renovation baseline.' },
+  { project_type: 'renovation', house_type: 'one_storey', finish_level: 'premium', rate_low: 20000, rate_base: 26000, rate_high: 32000, contingency_pct: 15, contractor_overhead_profit_pct: 18, vat_pct: 12, source_notes: 'Premium one-storey renovation baseline.' },
+  { project_type: 'renovation', house_type: 'two_storey', finish_level: 'basic', rate_low: 14000, rate_base: 18000, rate_high: 22000, contingency_pct: 12, contractor_overhead_profit_pct: 15, vat_pct: 12, source_notes: 'Basic two-storey renovation baseline.' },
+  { project_type: 'renovation', house_type: 'two_storey', finish_level: 'standard', rate_low: 17000, rate_base: 21500, rate_high: 26000, contingency_pct: 15, contractor_overhead_profit_pct: 15, vat_pct: 12, source_notes: 'Standard two-storey renovation baseline.' },
+  { project_type: 'renovation', house_type: 'two_storey', finish_level: 'premium', rate_low: 25000, rate_base: 32000, rate_high: 39000, contingency_pct: 15, contractor_overhead_profit_pct: 18, vat_pct: 12, source_notes: 'Premium two-storey renovation baseline.' },
+  { project_type: 'extension', house_type: 'one_storey', finish_level: 'basic', rate_low: 18000, rate_base: 22000, rate_high: 27000, contingency_pct: 10, contractor_overhead_profit_pct: 15, vat_pct: 12, source_notes: 'Basic one-storey extension baseline.' },
+  { project_type: 'extension', house_type: 'one_storey', finish_level: 'standard', rate_low: 22000, rate_base: 27000, rate_high: 32000, contingency_pct: 10, contractor_overhead_profit_pct: 15, vat_pct: 12, source_notes: 'Standard one-storey extension baseline.' },
+  { project_type: 'extension', house_type: 'one_storey', finish_level: 'premium', rate_low: 30000, rate_base: 37000, rate_high: 45000, contingency_pct: 12, contractor_overhead_profit_pct: 18, vat_pct: 12, source_notes: 'Premium one-storey extension baseline.' },
+  { project_type: 'extension', house_type: 'two_storey', finish_level: 'basic', rate_low: 22000, rate_base: 27000, rate_high: 32000, contingency_pct: 12, contractor_overhead_profit_pct: 15, vat_pct: 12, source_notes: 'Basic two-storey extension baseline.' },
+  { project_type: 'extension', house_type: 'two_storey', finish_level: 'standard', rate_low: 26000, rate_base: 31500, rate_high: 37000, contingency_pct: 12, contractor_overhead_profit_pct: 15, vat_pct: 12, source_notes: 'Standard two-storey extension baseline.' },
+  { project_type: 'extension', house_type: 'two_storey', finish_level: 'premium', rate_low: 35000, rate_base: 43000, rate_high: 51000, contingency_pct: 15, contractor_overhead_profit_pct: 18, vat_pct: 12, source_notes: 'Premium two-storey extension baseline.' },
+];
+
 export interface PreliminaryEstimateInput {
   projectType: WorkType;
   houseType: HouseType;
@@ -118,9 +154,28 @@ async function loadBenchmark(input: PreliminaryEstimateInput): Promise<Construct
     if (data) return data as ConstructionBenchmark;
   }
 
-  throw new Error(
-    `No active construction benchmark is configured for ${input.projectType}, ${input.houseType}, ${input.finishLevel} in ${input.region}.`
+  const fallback = FALLBACK_BENCHMARKS.find((benchmark) =>
+    benchmark.project_type === input.projectType
+    && benchmark.house_type === input.houseType
+    && benchmark.finish_level === input.finishLevel
   );
+
+  if (fallback) {
+    const now = new Date().toISOString();
+    return {
+      ...fallback,
+      id: `baseline-${fallback.project_type}-${fallback.house_type}-${fallback.finish_level}`,
+      region: 'NCR',
+      source: 'Built-in baseline catalog',
+      version: '2026.1',
+      effective_from: now,
+      is_active: true,
+      created_at: now,
+      updated_at: now,
+    };
+  }
+
+  throw new Error(`No benchmark is available for ${input.projectType}, ${input.houseType}, ${input.finishLevel}.`);
 }
 
 export async function calculatePreliminaryEstimateFromSupabase(
@@ -183,7 +238,9 @@ export function calculatePreliminaryEstimate(
     .filter((item) => item.status === 'excluded')
     .map((item) => item.name);
   const assumptions = [
-    `Estimate based on the ${benchmark.region} benchmark rate configured in Supabase.`,
+    benchmark.source === 'Built-in baseline catalog'
+      ? 'No matching active database rate was available. This estimate uses the built-in NCR baseline as a fallback.'
+      : `Estimate based on the ${benchmark.region} benchmark rate configured in Supabase.`,
     benchmark.source_notes,
   ].filter((assumption): assumption is string => Boolean(assumption));
 

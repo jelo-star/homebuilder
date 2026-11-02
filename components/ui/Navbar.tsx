@@ -27,6 +27,12 @@ interface NavbarProps {
 
 export default function Navbar({ userRole, userName, unreadCount = 0 }: NavbarProps) {
   const [mobileMenuOpen, setMobileMenuOpen] = React.useState(false);
+  const [authenticatedUser, setAuthenticatedUser] = React.useState<{ id: string; email: string | null; name: string | null } | null>(null);
+  const [profileRole, setProfileRole] = React.useState<UserRole | null>(null);
+  const [profileName, setProfileName] = React.useState<string | null>(null);
+  const effectiveRole = userRole ?? profileRole;
+  const effectiveName = userName || profileName || authenticatedUser?.name || authenticatedUser?.email?.split('@')[0] || 'User';
+  const isAuthenticated = Boolean(userRole || authenticatedUser);
 
   React.useEffect(() => {
     if (!mobileMenuOpen) return;
@@ -39,6 +45,59 @@ export default function Navbar({ userRole, userName, unreadCount = 0 }: NavbarPr
     return () => document.removeEventListener('keydown', handleKeyDown);
   }, [mobileMenuOpen]);
 
+  React.useEffect(() => {
+    const supabase = createClient();
+    const { data: authListener } = supabase.auth.onAuthStateChange((_event, session) => {
+      const user = session?.user;
+      if (!user) {
+        setAuthenticatedUser(null);
+        setProfileName(null);
+        setProfileRole(null);
+        return;
+      }
+
+      const metadataName = user.user_metadata?.full_name ?? user.user_metadata?.name;
+      setAuthenticatedUser({
+        id: user.id,
+        email: user.email ?? null,
+        name: typeof metadataName === 'string' ? metadataName : null,
+      });
+      setProfileName(null);
+      setProfileRole(null);
+    });
+
+    return () => authListener.subscription.unsubscribe();
+  }, []);
+
+  React.useEffect(() => {
+    if (!authenticatedUser) return;
+    let active = true;
+
+    const loadProfileSummary = async () => {
+      const { data, error } = await createClient()
+        .from('profiles')
+        .select('full_name, role')
+        .eq('id', authenticatedUser.id)
+        .maybeSingle();
+
+      if (!active) return;
+      if (error) {
+        console.error(`Unable to load navbar profile (${error.code}): ${error.message}`, error.details, error.hint);
+        return;
+      }
+
+      setProfileName(data?.full_name?.trim() || null);
+      if (data?.role === 'homeowner' || data?.role === 'contractor' || data?.role === 'admin') {
+        setProfileRole(data.role);
+      }
+    };
+
+    void loadProfileSummary();
+    return () => {
+      active = false;
+    };
+  }, [authenticatedUser]);
+
   const handleLogout = async () => {
     const supabase = createClient();
     const { error } = await supabase.auth.signOut();
@@ -50,14 +109,14 @@ export default function Navbar({ userRole, userName, unreadCount = 0 }: NavbarPr
   };
 
   const navLinks = React.useMemo(() => {
-    if (userRole === 'homeowner') {
+    if (effectiveRole === 'homeowner') {
       return [
         { label: 'Dashboard', href: '/homeowner/dashboard', icon: Home },
         { label: 'My Projects', href: '/homeowner/projects', icon: FileText },
         { label: 'Cost Calculator', href: '/homeowner/cost-calculator', icon: DollarSign },
       ];
     }
-    if (userRole === 'contractor') {
+    if (effectiveRole === 'contractor') {
       return [
         { label: 'Dashboard', href: '/contractor/dashboard', icon: Briefcase },
         { label: 'Opportunities', href: '/contractor/opportunities', icon: Building2 },
@@ -66,7 +125,7 @@ export default function Navbar({ userRole, userName, unreadCount = 0 }: NavbarPr
         { label: 'Portfolio', href: '/contractor/portfolio', icon: Home },
       ];
     }
-    if (userRole === 'admin') {
+    if (effectiveRole === 'admin') {
       return [
         { label: 'Admin Overview', href: '/admin/dashboard', icon: ShieldCheck },
         { label: 'Verification', href: '/admin/contractors', icon: ShieldCheck },
@@ -82,7 +141,7 @@ export default function Navbar({ userRole, userName, unreadCount = 0 }: NavbarPr
       { label: 'Post a Project', href: '/homeowner/projects/new' },
       { label: 'Become a Contractor', href: '/register' },
     ];
-  }, [userRole]);
+  }, [effectiveRole]);
 
   return (
     <nav className="bg-white border-b border-slate-200 sticky top-0 z-50">
@@ -115,10 +174,10 @@ export default function Navbar({ userRole, userName, unreadCount = 0 }: NavbarPr
 
           {/* Right Header / User Area */}
           <div className="hidden md:flex md:items-center md:space-x-4">
-            {userRole ? (
+            {isAuthenticated ? (
               <div className="flex items-center gap-3">
                 <Link
-                  href="/notifications"
+                  href={effectiveRole === 'admin' ? '/admin/notifications' : effectiveRole === 'contractor' ? '/contractor/notifications' : '/homeowner/notifications'}
                   className="relative p-2 rounded-lg text-slate-500 hover:text-emerald-700 hover:bg-slate-50 transition-colors"
                 >
                   <Bell className="w-5 h-5" />
@@ -127,11 +186,13 @@ export default function Navbar({ userRole, userName, unreadCount = 0 }: NavbarPr
                   )}
                 </Link>
 
-                <div className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-slate-100 border border-slate-200 text-xs">
-                  <User className="w-3.5 h-3.5 text-slate-500" />
-                  <span className="font-medium text-slate-700">{userName || 'User'}</span>
-                  <span className="px-1.5 py-0.5 rounded bg-emerald-100 text-emerald-800 font-semibold uppercase text-[10px]">
-                    {userRole}
+                <div className="flex items-center gap-2.5 rounded-xl px-2 py-1">
+                  <span className="flex h-9 w-9 items-center justify-center rounded-full bg-slate-100 text-slate-500 ring-1 ring-slate-200">
+                    <User className="h-4 w-4" aria-hidden="true" />
+                  </span>
+                  <span className="flex min-w-0 flex-col leading-tight">
+                    <span className="max-w-36 truncate text-xs font-semibold text-slate-800">{effectiveName}</span>
+                    <span className="mt-0.5 text-[10px] capitalize text-slate-500">{effectiveRole || 'Account'}</span>
                   </span>
                 </div>
 
@@ -193,10 +254,16 @@ export default function Navbar({ userRole, userName, unreadCount = 0 }: NavbarPr
               {link.label}
             </Link>
           ))}
-          {userRole ? (
+          {isAuthenticated ? (
             <div className="pt-4 border-t border-slate-100 space-y-2">
-              <div className="px-3 py-1 text-xs text-slate-500">
-                Signed in as <span className="font-semibold text-slate-700">{userName}</span> ({userRole})
+              <div className="flex items-center gap-3 px-3 py-2">
+                <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-slate-100 text-slate-500 ring-1 ring-slate-200">
+                  <User className="h-5 w-5" aria-hidden="true" />
+                </span>
+                <span className="flex min-w-0 flex-col">
+                  <span className="truncate text-sm font-semibold text-slate-800">{effectiveName}</span>
+                  <span className="text-xs capitalize text-slate-500">{effectiveRole || 'Account'}</span>
+                </span>
               </div>
               <button
                 onClick={handleLogout}

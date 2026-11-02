@@ -1,28 +1,18 @@
 'use client';
 
 import React from 'react';
-import Link from 'next/link';
 import AppLayout from '@/components/ui/AppLayout';
 import { 
-  Calculator, 
-  ArrowRight, 
   Building2, 
-  DollarSign, 
   CheckCircle2, 
   Info, 
-  Layers, 
   FileText,
   Bookmark,
   Sparkles,
   Sliders,
-  ShieldCheck,
-  Check,
   ChevronDown,
   ChevronUp,
-  FileCheck,
   Home,
-  Hammer,
-  Maximize2
 } from 'lucide-react';
 import { 
   checkBudgetStatus,
@@ -32,6 +22,7 @@ import { formatCurrency } from '@/lib/utils/formatters';
 import { FinishLevel, WorkType, HouseType } from '@/types/database';
 import { createClient } from '@/lib/supabase/client';
 import { calculatePreliminaryEstimateFromSupabase } from '@/lib/utils/estimator';
+import { getRegionCodeForProvince } from '@/lib/utils/philippines';
 import { useRouter } from 'next/navigation';
 
 export default function CostCalculatorPage() {
@@ -39,7 +30,7 @@ export default function CostCalculatorPage() {
 
   // Input parameters matching the visual reference design
   const [workType, setWorkType] = React.useState<WorkType>('new_build');
-  const [houseType, setHouseType] = React.useState<HouseType>('two_storey');
+  const [houseType, setHouseType] = React.useState<HouseType>('one_storey');
   const [finishLevel, setFinishLevel] = React.useState<FinishLevel>('standard');
   const [floorArea, setFloorArea] = React.useState(0);
   const [floors, setFloors] = React.useState(1);
@@ -47,11 +38,10 @@ export default function CostCalculatorPage() {
   const [groundFloorArea, setGroundFloorArea] = React.useState(0);
   const [secondFloorArea, setSecondFloorArea] = React.useState(0);
 
-  const [province, setProvince] = React.useState('');
+  const [province, setProvince] = React.useState('Metro Manila');
   const [city, setCity] = React.useState('');
-  const hasCity = Boolean(city.trim());
   const [userBudget, setUserBudget] = React.useState<number | ''>('');
-  const [paymentTranches, setPaymentTranches] = React.useState<number>(3); // Maximum of 5 times
+  const [paymentTranches] = React.useState<number>(3);
 
   // Expandable Category Breakdown Accordion
   const [expandedCategories, setExpandedCategories] = React.useState<Record<string, boolean>>({
@@ -92,44 +82,52 @@ export default function CostCalculatorPage() {
     return () => { active = false; };
   }, []);
 
-  // Auto tally multi-storey floor area
+  const estimateInput = React.useMemo(() => ({
+    projectType: workType,
+    houseType,
+    finishLevel,
+    floorArea,
+    floors,
+    region: getRegionCodeForProvince(province),
+    city: '',
+  }), [workType, houseType, finishLevel, floorArea, floors, province]);
+  const estimateKey = JSON.stringify(estimateInput);
+  const hasValidFloorArea = Number.isFinite(floorArea) && floorArea >= 20 && floorArea <= 1500;
+  const [estimateOutcome, setEstimateOutcome] = React.useState<{
+    key: string;
+    result: ComprehensiveEstimateResult | null;
+    error: string;
+  } | null>(null);
+  const estimateResult = estimateOutcome?.key === estimateKey ? estimateOutcome.result : null;
+  const estimateError = !hasValidFloorArea && floorArea !== 0
+    ? 'Enter a total floor area between 20 and 1,500 sq.m.'
+    : estimateOutcome?.key === estimateKey
+      ? estimateOutcome.error
+      : '';
+  const estimateLoading = Boolean(
+    hasValidFloorArea && floors && province && estimateOutcome?.key !== estimateKey,
+  );
+
   React.useEffect(() => {
-    if (useMultiStoreyHelper && floors >= 2) {
-      setFloorArea((Number(groundFloorArea) || 0) + (Number(secondFloorArea) || 0));
-    }
-  }, [useMultiStoreyHelper, groundFloorArea, secondFloorArea, floors]);
+    if (!hasValidFloorArea || !estimateInput.floors || !province) return;
 
-  // Compute reference-style estimate
-  const [estimateResult, setEstimateResult] = React.useState<ComprehensiveEstimateResult | null>(null);
-  const [estimateError, setEstimateError] = React.useState('');
-
-  React.useEffect(() => {
-    if (!floorArea || !floors || !province || !hasCity) {
-      setEstimateResult(null);
-      setEstimateError('');
-      return;
-    }
-
-    const regionKey = province.includes('Metro Manila') ? 'NCR' : province.includes('Cavite') || province.includes('Laguna') || province.includes('Rizal') ? 'Region IV-A (Calabarzon)' : 'Other Provinces';
     let active = true;
-    setEstimateResult(null);
-    setEstimateError('');
-    calculatePreliminaryEstimateFromSupabase({
-      projectType: workType,
-      houseType,
-      finishLevel,
-      floorArea,
-      floors,
-      region: regionKey,
-      city: '',
-    })
-      .then(result => { if (active) setEstimateResult(result); })
+    calculatePreliminaryEstimateFromSupabase(estimateInput)
+      .then(result => {
+        if (active) setEstimateOutcome({ key: estimateKey, result, error: '' });
+      })
       .catch(error => {
-        if (active) setEstimateError(error instanceof Error ? error.message : 'No active database benchmark is available.');
+        if (active) {
+          setEstimateOutcome({
+            key: estimateKey,
+            result: null,
+            error: error instanceof Error ? error.message : 'No active database benchmark is available.',
+          });
+        }
       });
 
     return () => { active = false; };
-  }, [workType, houseType, finishLevel, floorArea, floors, province, hasCity]);
+  }, [estimateInput, estimateKey, hasValidFloorArea, province]);
 
   const budgetAnalysis = React.useMemo(() => {
     if (!estimateResult) return null;
@@ -354,7 +352,7 @@ export default function CostCalculatorPage() {
                 </button>
               </div>
 
-              {useMultiStoreyHelper ? (
+              {useMultiStoreyHelper && floors >= 2 ? (
                 <div className="grid grid-cols-2 gap-3 p-3 rounded-xl bg-slate-50 border border-slate-200">
                   <div>
                     <span className="text-[11px] text-slate-500 block mb-1">Ground Floor (sq.m)</span>
@@ -362,7 +360,11 @@ export default function CostCalculatorPage() {
                       type="number"
                       min="10"
                       value={groundFloorArea}
-                      onChange={(e) => setGroundFloorArea(Number(e.target.value))}
+                      onChange={(e) => {
+                        const area = Number(e.target.value) || 0;
+                        setGroundFloorArea(area);
+                        setFloorArea(area + (Number(secondFloorArea) || 0));
+                      }}
                       className="w-full p-2 border border-slate-300 rounded-lg text-sm bg-white"
                     />
                   </div>
@@ -372,7 +374,11 @@ export default function CostCalculatorPage() {
                       type="number"
                       min="10"
                       value={secondFloorArea}
-                      onChange={(e) => setSecondFloorArea(Number(e.target.value))}
+                      onChange={(e) => {
+                        const area = Number(e.target.value) || 0;
+                        setSecondFloorArea(area);
+                        setFloorArea((Number(groundFloorArea) || 0) + area);
+                      }}
                       className="w-full p-2 border border-slate-300 rounded-lg text-sm bg-white"
                     />
                   </div>
@@ -499,7 +505,7 @@ export default function CostCalculatorPage() {
                   <option value="Bulacan">Bulacan</option>
                   <option value="Pampanga">Pampanga</option>
                   <option value="Cebu">Cebu</option>
-                  <option value="Davao">Davao</option>
+                  <option value="Davao del Sur">Davao del Sur</option>
                   <option value="Other Province">Other Province</option>
                 </select>
               </div>
@@ -611,7 +617,7 @@ export default function CostCalculatorPage() {
                 <div className="flex justify-between py-1">
                   <span className="text-slate-500">Benchmark Source:</span>
                   <span className="text-slate-600 truncate max-w-[200px]" title={estimateResult.benchmarkSource}>
-                    PSA & Arcadis (2026.1)
+                    {estimateResult.benchmarkSource} ({estimateResult.benchmarkVersion})
                   </span>
                 </div>
               </div>
@@ -653,7 +659,11 @@ export default function CostCalculatorPage() {
                 </>
               ) : (
                 <div className="py-8 text-center text-xs text-slate-500">
-                  {estimateError || 'Enter the project location and dimensions to load an active database benchmark.'}
+                  {estimateLoading
+                    ? 'Calculating your estimate…'
+                    : estimateError
+                      ? <p role="alert" className="text-rose-700">{estimateError}</p>
+                      : 'Enter the floor area to calculate an estimate. Add your city later when you publish your project.'}
                 </div>
               )}
             </div>

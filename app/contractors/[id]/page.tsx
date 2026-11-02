@@ -260,10 +260,10 @@ function ContractorPublicProfileContent() {
   ] as const;
 
   return (
-    <main className="min-h-screen bg-slate-50 text-slate-800">
+    <main className="min-h-screen bg-[#eef4f1] text-slate-800">
       <Navbar />
       <section className="bg-gradient-to-br from-emerald-950 to-emerald-800 py-10 text-white">
-        <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
+        <div className="w-full px-4 sm:px-6 lg:px-10 2xl:px-14">
           <Link href={backHref} className="inline-flex items-center gap-2 text-sm font-semibold text-emerald-100 hover:text-white">
             <ArrowLeft className="h-4 w-4" /> {backLabel}
           </Link>
@@ -284,7 +284,7 @@ function ContractorPublicProfileContent() {
         </div>
       </section>
 
-      <section className="mx-auto max-w-7xl px-4 py-8 sm:px-6 lg:px-8">
+      <section className="w-full px-4 py-8 sm:px-6 lg:px-10 2xl:px-14">
         <nav className="flex gap-2 overflow-x-auto border-b border-slate-200" aria-label="Contractor profile sections">
           {tabs.map((tab) => (
             <button key={tab.key} type="button" onClick={() => setActiveTab(tab.key)} className={`whitespace-nowrap border-b-2 px-4 py-3 text-sm font-bold ${activeTab === tab.key ? 'border-[#136F48] text-[#136F48]' : 'border-transparent text-slate-500 hover:text-slate-900'}`}>
@@ -295,7 +295,7 @@ function ContractorPublicProfileContent() {
 
         {activeTab === 'overview' && (
           <div className="space-y-6 py-7">
-            <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+            <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
               {[
                 {
                   label: 'Experience',
@@ -304,16 +304,10 @@ function ContractorPublicProfileContent() {
                   tone: 'bg-amber-50 text-amber-700',
                 },
                 {
-                  label: 'Completed projects',
-                  value: contractor.projects_completed ?? 'Not provided',
+                  label: 'Portfolio projects',
+                  value: portfolioCount ?? 'Not available',
                   icon: BriefcaseBusiness,
                   tone: 'bg-blue-50 text-blue-700',
-                },
-                {
-                  label: 'Team capacity',
-                  value: contractor.team_capacity ?? 'Not provided',
-                  icon: UserRound,
-                  tone: 'bg-violet-50 text-violet-700',
                 },
                 {
                   label: 'Typical project budget',
@@ -472,7 +466,7 @@ function ContractorPublicProfileContent() {
                 <p className="mt-2 text-sm text-slate-600">This contractor has not shared portfolio projects.</p>
               </div>
             ) : (
-              <div className="grid gap-5 md:grid-cols-2">
+              <div className="grid gap-5 sm:grid-cols-2 xl:grid-cols-3">
                 {portfolio.map((item) => (
                   <article key={item.id} className="rounded-2xl border border-slate-200 bg-white p-5">
                     {item.portfolio_images?.[0]?.file_path && (

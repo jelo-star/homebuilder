@@ -5,7 +5,7 @@ import Link from 'next/link';
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import Navbar from '@/components/ui/Navbar';
 import { createClient } from '@/lib/supabase/client';
-import { Search, Star, ShieldCheck, ArrowRight, SlidersHorizontal } from 'lucide-react';
+import { Search, Star, ShieldCheck, ArrowRight } from 'lucide-react';
 
 type ContractorRecord = {
   profile_id: string;
@@ -14,7 +14,6 @@ type ContractorRecord = {
   service_cities: string[];
   specialties: string[];
   work_types: string[];
-  license_no: string | null;
   rating_avg: number;
   rating_count: number;
   min_project_budget: number | null;
@@ -58,7 +57,6 @@ function ContractorsDirectoryContent() {
   const [search, setSearch] = React.useState(searchParams.get('search') ?? '');
   const [location, setLocation] = React.useState(searchParams.get('location') ?? '');
   const [service, setService] = React.useState(searchParams.get('service') ?? 'all');
-  const [sort, setSort] = React.useState(searchParams.get('sort') === 'reviews' ? 'reviews' : 'rating');
   const [page, setPage] = React.useState(() => getPageFromParams(new URLSearchParams(queryString)));
   const [directoryExhausted, setDirectoryExhausted] = React.useState(false);
   const [scannedCount, setScannedCount] = React.useState(0);
@@ -86,7 +84,6 @@ function ContractorsDirectoryContent() {
       setSearch(params.get('search') ?? '');
       setLocation(params.get('location') ?? '');
       setService(params.get('service') ?? 'all');
-      setSort(params.get('sort') === 'reviews' ? 'reviews' : 'rating');
       setPage(getPageFromParams(params));
     };
 
@@ -96,7 +93,7 @@ function ContractorsDirectoryContent() {
 
   const normalizedSearch = search.trim().toLowerCase();
   const normalizedLocation = location.trim().toLowerCase();
-  const filterKey = JSON.stringify([normalizedSearch, normalizedLocation, service, sort]);
+  const filterKey = JSON.stringify([normalizedSearch, normalizedLocation, service]);
 
   React.useEffect(() => {
     let active = true;
@@ -127,13 +124,9 @@ function ContractorsDirectoryContent() {
           const end = currentScan.offset + PAGE_SIZE - 1;
           let query = supabase
             .from('contractor_directory')
-            .select('profile_id, business_name, bio, service_cities, specialties, work_types, license_no, rating_avg, rating_count, min_project_budget, max_project_budget')
-            .order(sort === 'reviews' ? 'rating_count' : 'rating_avg', { ascending: false });
-
-          if (sort === 'reviews') {
-            query = query.order('rating_avg', { ascending: false });
-          }
-          query = query.order('profile_id', { ascending: true });
+            .select('profile_id, business_name, bio, service_cities, specialties, work_types, rating_avg, rating_count, min_project_budget, max_project_budget')
+            .order('business_name', { ascending: true })
+            .order('profile_id', { ascending: true });
 
           if (service !== 'all') query = query.contains('work_types', [service]);
 
@@ -180,19 +173,18 @@ function ContractorsDirectoryContent() {
     return () => {
       active = false;
     };
-  }, [filterKey, normalizedLocation, normalizedSearch, page, service, sort]);
+  }, [filterKey, normalizedLocation, normalizedSearch, page, service]);
 
   const visibleContractors = contractors.slice(page * PAGE_SIZE, (page + 1) * PAGE_SIZE);
   const hasPrevious = page > 0;
   const hasNext = contractors.length > (page + 1) * PAGE_SIZE;
 
-  const changeFilter = (key: 'search' | 'location' | 'service' | 'sort', value: string) => {
+  const changeFilter = (key: 'search' | 'location' | 'service', value: string) => {
     if (key === 'search') setSearch(value);
     else if (key === 'location') setLocation(value);
-    else if (key === 'service') setService(value);
-    else setSort(value);
+    else setService(value);
     setPage(0);
-    updateQueryParams({ [key]: value || null, page: '1' });
+    updateQueryParams({ [key]: value || null, sort: null, page: '1' });
   };
 
   const changePage = (nextPage: number) => {
@@ -201,57 +193,68 @@ function ContractorsDirectoryContent() {
   };
 
   return (
-    <main className="min-h-screen bg-slate-50 text-slate-800">
+    <main className="min-h-screen bg-[#f3f7f4] text-slate-800">
       <Navbar />
-      <section className="border-b border-slate-200 bg-white py-10">
-        <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
-          <p className="text-xs font-bold uppercase tracking-widest text-[#136F48]">Contractor directory</p>
-          <h1 className="mt-2 text-3xl font-extrabold tracking-tight text-slate-900 sm:text-4xl">Find a contractor</h1>
-          <p className="mt-3 max-w-2xl text-sm leading-relaxed text-slate-600">
-            Browse active, approved contractor profiles and filter by their listed services and service areas.
-          </p>
+      <section className="border-b border-[#d6e5dc] bg-[#e6f1eb]">
+        <div className="w-full px-4 py-9 sm:px-6 lg:px-10 lg:py-12">
+          <div className="flex flex-col gap-6 xl:flex-row xl:items-end xl:justify-between">
+            <div className="max-w-3xl">
+              <p className="text-xs font-bold uppercase tracking-[0.2em] text-[#136F48]">Contractor directory</p>
+              <h1 className="mt-3 text-4xl font-extrabold tracking-[-0.05em] text-slate-900 sm:text-5xl">Find the right team for your project</h1>
+              <p className="mt-3 max-w-2xl text-base leading-relaxed text-slate-600">
+                Compare approved local professionals by services, service areas, experience and project budget.
+              </p>
+            </div>
+            <div className="flex shrink-0 items-center gap-3 rounded-xl border border-white/80 bg-white/70 px-4 py-3 text-sm text-slate-600 shadow-sm">
+              <ShieldCheck className="h-5 w-5 text-[#136F48]" />
+              <span>Active, approved contractor profiles</span>
+            </div>
+          </div>
 
-          <div className="mt-7 grid gap-3 rounded-2xl border border-slate-200 bg-slate-50 p-4 md:grid-cols-4">
-            <label className="flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-3">
+          <div className="mt-8 grid gap-3 rounded-2xl border border-[#d8e6dd] bg-white/80 p-3 shadow-[0_12px_30px_rgba(15,23,42,0.05)] md:grid-cols-3">
+            <label className="flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 transition focus-within:border-[#136F48] focus-within:ring-2 focus-within:ring-[#136F48]/10">
               <Search className="h-4 w-4 shrink-0 text-slate-400" />
               <span className="sr-only">Search contractors</span>
-              <input value={search} onChange={(event) => changeFilter('search', event.target.value)} placeholder="Business, trade, or specialty" className="w-full py-3 text-sm outline-none" />
+              <input value={search} onChange={(event) => changeFilter('search', event.target.value)} placeholder="Business, trade, or specialty" className="w-full py-3.5 text-sm outline-none" />
             </label>
-            <label className="rounded-xl border border-slate-200 bg-white px-3">
+            <label className="rounded-xl border border-slate-200 bg-white px-3 transition focus-within:border-[#136F48] focus-within:ring-2 focus-within:ring-[#136F48]/10">
               <span className="sr-only">Filter by service area</span>
-              <input value={location} onChange={(event) => changeFilter('location', event.target.value)} placeholder="Service area" className="w-full py-3 text-sm outline-none" />
+              <input value={location} onChange={(event) => changeFilter('location', event.target.value)} placeholder="Service area" className="w-full py-3.5 text-sm outline-none" />
             </label>
             <label className="rounded-xl border border-slate-200 bg-white px-3">
               <span className="sr-only">Filter by service type</span>
-              <select value={service} onChange={(event) => changeFilter('service', event.target.value)} className="w-full bg-white py-3 text-sm outline-none">
+              <select value={service} onChange={(event) => changeFilter('service', event.target.value)} className="w-full bg-white py-3.5 text-sm outline-none">
                 {serviceOptions.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
-              </select>
-            </label>
-            <label className="flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-3">
-              <SlidersHorizontal className="h-4 w-4 shrink-0 text-slate-400" />
-              <span className="sr-only">Sort contractors</span>
-              <select value={sort} onChange={(event) => changeFilter('sort', event.target.value)} className="w-full bg-white py-3 text-sm outline-none">
-                <option value="rating">Highest rated</option>
-                <option value="reviews">Most reviewed</option>
               </select>
             </label>
           </div>
         </div>
       </section>
 
-      <section className="mx-auto max-w-7xl px-4 py-9 sm:px-6 lg:px-8">
-        <p className="mb-5 text-sm text-slate-600" aria-live="polite">
-          {loading ? 'Loading contractor profiles…' : loadError ? 'Directory unavailable' : directoryExhausted
-            ? `${contractors.length} contractor${contractors.length === 1 ? '' : 's'} found`
-            : `Showing ${page * PAGE_SIZE + 1}–${Math.min((page + 1) * PAGE_SIZE, contractors.length)} matching contractors`}
-        </p>
+      <section className="w-full px-4 py-8 sm:px-6 lg:px-10 lg:py-10">
+        <div className="mb-6 flex flex-col gap-2 border-b border-slate-200 pb-5 sm:flex-row sm:items-end sm:justify-between">
+          <div>
+            <p className="text-xs font-bold uppercase tracking-[0.16em] text-[#136F48]">Browse professionals</p>
+            <h2 className="mt-1 text-2xl font-bold tracking-tight text-slate-900">Available contractors</h2>
+          </div>
+          <p className="text-sm text-slate-600" aria-live="polite">
+            {loading ? 'Loading contractor profiles…' : loadError ? 'Directory unavailable' : directoryExhausted
+              ? `${contractors.length} contractor${contractors.length === 1 ? '' : 's'} found`
+              : `Showing ${page * PAGE_SIZE + 1}–${Math.min((page + 1) * PAGE_SIZE, contractors.length)} matching contractors`}
+          </p>
+        </div>
         {loadError ? (
-          <div role="alert" className="rounded-2xl border border-rose-200 bg-rose-50 p-6 text-sm text-rose-800">{loadError}</div>
+          <div role="alert" className="rounded-2xl border border-rose-200 bg-white p-6 text-sm text-rose-800 shadow-sm">{loadError}</div>
         ) : loading ? (
-          <div className="rounded-2xl border border-slate-200 bg-white p-8 text-sm text-slate-500">Loading contractor profiles…</div>
+          <div className="grid gap-5 md:grid-cols-2 xl:grid-cols-3">
+            {[0, 1, 2].map((item) => <div key={item} className="h-64 animate-pulse rounded-2xl border border-slate-200 bg-white shadow-sm" />)}
+          </div>
         ) : visibleContractors.length === 0 ? (
-          <div className="rounded-2xl border border-dashed border-slate-300 bg-white p-10 text-center">
-            <h2 className="font-bold text-slate-900">No matching contractors</h2>
+          <div className="rounded-2xl border border-dashed border-slate-300 bg-white px-6 py-16 text-center shadow-sm">
+            <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-[#edf5f0] text-[#136F48]">
+              <Search className="h-5 w-5" />
+            </div>
+            <h2 className="mt-4 text-lg font-bold text-slate-900">No matching contractors</h2>
             <p className="mt-2 text-sm text-slate-600">
               {scannedCount === 0 && !search && !location && service === 'all'
                 ? 'There are no active, approved contractor profiles available yet.'
@@ -259,7 +262,7 @@ function ContractorsDirectoryContent() {
             </p>
           </div>
         ) : (
-          <div className="grid gap-5 md:grid-cols-2 xl:grid-cols-3">
+          <div className="grid gap-5 md:grid-cols-2 2xl:grid-cols-3">
             {visibleContractors.map((contractor) => {
               const specialties = contractor.specialties ?? [];
               const workTypes = contractor.work_types ?? [];
@@ -267,37 +270,46 @@ function ContractorsDirectoryContent() {
               const minBudget = contractor.min_project_budget == null ? null : Number(contractor.min_project_budget);
               const maxBudget = contractor.max_project_budget == null ? null : Number(contractor.max_project_budget);
               return (
-                <article key={contractor.profile_id} className="flex flex-col rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-                  <div className="flex items-start justify-between gap-3">
-                    <div>
-                      <h2 className="text-lg font-extrabold text-slate-900">{contractor.business_name}</h2>
-                      <div className="mt-2 flex items-center gap-2 text-xs text-emerald-800">
-                        <ShieldCheck className="h-4 w-4" />
-                        Approved profile
+                <article key={contractor.profile_id} className="group flex min-h-[300px] flex-col rounded-2xl border border-slate-200 bg-white p-5 shadow-[0_8px_24px_rgba(15,23,42,0.04)] transition hover:-translate-y-0.5 hover:border-[#bdd8c7] hover:shadow-[0_16px_34px_rgba(15,23,42,0.08)]">
+                  <div className="flex items-start justify-between gap-3 border-b border-slate-100 pb-4">
+                    <div className="flex min-w-0 items-center gap-3">
+                      <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl border border-[#d6e8de] bg-[#f0f7f3] text-lg font-bold text-[#136F48]">
+                        {contractor.business_name.trim().slice(0, 1).toUpperCase() || 'C'}
+                      </div>
+                      <div className="min-w-0">
+                        <div className="flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-[0.14em] text-[#136F48]">
+                          <ShieldCheck className="h-3.5 w-3.5" />
+                          Approved profile
+                        </div>
+                        <h3 className="mt-1 truncate text-lg font-bold text-slate-900">{contractor.business_name}</h3>
                       </div>
                     </div>
                     {Number(contractor.rating_count) > 0 ? (
-                      <div className="flex shrink-0 items-center gap-1 text-sm font-bold text-slate-800">
-                        <Star className="h-4 w-4 fill-amber-400 text-amber-400" />
+                      <div className="flex shrink-0 items-center gap-1 rounded-lg border border-slate-200 bg-slate-50 px-2 py-1 text-sm font-bold text-slate-800">
+                        <Star className="h-4 w-4 fill-amber-400 text-amber-500" />
                         {Number(contractor.rating_avg).toFixed(1)}
                         <span className="text-xs font-normal text-slate-500">({contractor.rating_count})</span>
                       </div>
-                    ) : <span className="text-xs text-slate-500">No reviews yet</span>}
+                    ) : <span className="shrink-0 text-xs text-slate-500">No reviews</span>}
                   </div>
-                  {contractor.bio && <p className="mt-4 line-clamp-3 text-sm leading-relaxed text-slate-600">{contractor.bio}</p>}
-                  {workTypes.length > 0 && (
-                    <div className="mt-4 flex flex-wrap gap-2">
-                      {workTypes.map((workType) => <span key={workType} className="rounded-full bg-emerald-50 px-3 py-1 text-xs font-semibold text-emerald-800">{workType.replaceAll('_', ' ')}</span>)}
-                      {specialties.map((specialty) => <span key={specialty} className="rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-700">{specialty.replaceAll('_', ' ')}</span>)}
+                  {contractor.bio && <p className="mt-4 line-clamp-3 min-h-[3.75rem] text-sm leading-relaxed text-slate-600">{contractor.bio}</p>}
+                  <div className="mt-4">
+                    <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-slate-500">Services & specialties</p>
+                    <div className="mt-2 flex min-h-7 flex-wrap gap-2">
+                      {workTypes.length || specialties.length ? (
+                        <>
+                          {workTypes.map((workType) => <span key={workType} className="rounded-md border border-[#d7e9de] bg-[#f1f8f4] px-2.5 py-1 text-xs font-medium capitalize text-[#155b3d]">{workType.replaceAll('_', ' ')}</span>)}
+                          {specialties.map((specialty) => <span key={specialty} className="rounded-md border border-slate-200 bg-slate-50 px-2.5 py-1 text-xs font-medium capitalize text-slate-700">{specialty.replaceAll('_', ' ')}</span>)}
+                        </>
+                      ) : <span className="text-sm text-slate-500">Not listed</span>}
                     </div>
-                  )}
-                  <dl className="mt-4 space-y-2 border-t border-slate-100 pt-4 text-sm">
-                    <div><dt className="inline font-semibold text-slate-700">Service areas: </dt><dd className="inline text-slate-600">{cities.length ? cities.join(', ') : 'Not listed'}</dd></div>
+                  </div>
+                  <dl className="mt-4 grow space-y-2 border-t border-slate-100 pt-4 text-sm">
+                    <div><dt className="font-semibold text-slate-700">Service areas</dt><dd className="mt-1 line-clamp-2 text-slate-600">{cities.length ? cities.join(', ') : 'Not listed'}</dd></div>
                     <div><dt className="inline font-semibold text-slate-700">Project budget: </dt><dd className="inline text-slate-600">{minBudget != null || maxBudget != null ? `${minBudget != null ? formatCurrency(minBudget) : 'Not specified'} – ${maxBudget != null ? formatCurrency(maxBudget) : 'Not specified'}` : 'Contact for pricing'}</dd></div>
-                    {contractor.license_no && <div><dt className="inline font-semibold text-slate-700">License: </dt><dd className="inline text-slate-600">{contractor.license_no}</dd></div>}
                   </dl>
-                  <Link href={`/contractors/${contractor.profile_id}`} className="mt-5 inline-flex items-center gap-2 font-bold text-sm text-[#136F48] hover:underline">
-                    View profile <ArrowRight className="h-4 w-4" />
+                  <Link href={`/contractors/${contractor.profile_id}`} className="mt-5 inline-flex min-h-11 items-center justify-center gap-2 rounded-lg bg-[#136F48] px-4 py-2 text-sm font-semibold text-white transition hover:bg-[#0f5738] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#136F48]">
+                    View contractor profile <ArrowRight className="h-4 w-4" />
                   </Link>
                 </article>
               );

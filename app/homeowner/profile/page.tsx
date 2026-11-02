@@ -7,12 +7,11 @@ import {
   Mail, 
   Phone, 
   MapPin, 
-  ShieldCheck, 
   Save, 
   AlertCircle, 
   CheckCircle2, 
-  Building2,
-  Calendar
+  Calendar,
+  KeyRound
 } from 'lucide-react';
 import { createClient } from '@/lib/supabase/client';
 import { Profile } from '@/types/database';
@@ -30,6 +29,12 @@ export default function HomeownerProfilePage() {
   const [address, setAddress] = React.useState('');
   const [errorMsg, setErrorMsg] = React.useState('');
   const [successMsg, setSuccessMsg] = React.useState('');
+  const [currentPassword, setCurrentPassword] = React.useState('');
+  const [newPassword, setNewPassword] = React.useState('');
+  const [confirmPassword, setConfirmPassword] = React.useState('');
+  const [passwordSaving, setPasswordSaving] = React.useState(false);
+  const [passwordError, setPasswordError] = React.useState('');
+  const [passwordSuccess, setPasswordSuccess] = React.useState('');
 
   React.useEffect(() => {
     if (!errorMsg && !successMsg) return;
@@ -116,6 +121,51 @@ export default function HomeownerProfilePage() {
       setErrorMsg(message);
     } finally {
       setSaving(false);
+    }
+  };
+
+  const handleChangePassword = async (e: React.FormEvent<HTMLFormElement>) => {
+    e.preventDefault();
+    setPasswordError('');
+    setPasswordSuccess('');
+
+    if (newPassword.length < 8 || newPassword.length > 72) {
+      setPasswordError('New password must be between 8 and 72 characters.');
+      return;
+    }
+    if (newPassword !== confirmPassword) {
+      setPasswordError('New password and confirmation do not match.');
+      return;
+    }
+    if (newPassword === currentPassword) {
+      setPasswordError('Choose a new password that differs from your current password.');
+      return;
+    }
+    if (!email) {
+      setPasswordError('Your account email could not be verified. Reload and try again.');
+      return;
+    }
+
+    setPasswordSaving(true);
+    try {
+      const supabase = createClient();
+      const { error: reauthError } = await supabase.auth.signInWithPassword({
+        email,
+        password: currentPassword,
+      });
+      if (reauthError) throw new Error(`Current password could not be verified: ${reauthError.message}`);
+
+      const { error: updateError } = await supabase.auth.updateUser({ password: newPassword });
+      if (updateError) throw updateError;
+
+      setCurrentPassword('');
+      setNewPassword('');
+      setConfirmPassword('');
+      setPasswordSuccess('Your password has been changed.');
+    } catch (changeError) {
+      setPasswordError(changeError instanceof Error ? changeError.message : 'Password could not be changed.');
+    } finally {
+      setPasswordSaving(false);
     }
   };
 
@@ -300,6 +350,84 @@ export default function HomeownerProfilePage() {
             </div>
           </form>
         </div>
+
+        <section id="security" className="scroll-mt-6 bg-white p-6 sm:p-8 rounded-2xl border border-slate-200 shadow-sm">
+          <div className="mb-5 flex items-center gap-3 border-b border-slate-100 pb-4">
+            <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-blue-50 text-blue-700">
+              <KeyRound className="h-5 w-5" />
+            </div>
+            <div>
+              <h3 className="text-base font-bold text-slate-900">Account Security</h3>
+              <p className="text-xs text-slate-500">Update the password you use to sign in to HomeBuilder.</p>
+            </div>
+          </div>
+
+          {passwordError && (
+            <div role="alert" className="mb-4 flex items-start gap-2 rounded-xl border border-red-200 bg-red-50 p-4 text-xs text-red-800">
+              <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" />
+              <span>{passwordError}</span>
+            </div>
+          )}
+          {passwordSuccess && (
+            <div role="status" className="mb-4 flex items-start gap-2 rounded-xl border border-emerald-200 bg-emerald-50 p-4 text-xs text-emerald-800">
+              <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0" />
+              <span>{passwordSuccess}</span>
+            </div>
+          )}
+
+          <form onSubmit={handleChangePassword} className="space-y-4">
+            <label className="block space-y-1.5 text-xs font-semibold text-slate-700">
+              Current password
+              <input
+                type="password"
+                required
+                autoComplete="current-password"
+                value={currentPassword}
+                onChange={event => setCurrentPassword(event.target.value)}
+                className="w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm font-normal text-slate-900 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/20"
+              />
+            </label>
+            <div className="grid gap-4 sm:grid-cols-2">
+              <label className="block space-y-1.5 text-xs font-semibold text-slate-700">
+                New password
+                <input
+                  type="password"
+                  required
+                  minLength={8}
+                  maxLength={72}
+                  autoComplete="new-password"
+                  value={newPassword}
+                  onChange={event => setNewPassword(event.target.value)}
+                  className="w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm font-normal text-slate-900 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/20"
+                />
+                <span className="block font-normal text-slate-500">Use 8–72 characters.</span>
+              </label>
+              <label className="block space-y-1.5 text-xs font-semibold text-slate-700">
+                Confirm new password
+                <input
+                  type="password"
+                  required
+                  minLength={8}
+                  maxLength={72}
+                  autoComplete="new-password"
+                  value={confirmPassword}
+                  onChange={event => setConfirmPassword(event.target.value)}
+                  className="w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm font-normal text-slate-900 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/20"
+                />
+              </label>
+            </div>
+            <div className="pt-4 border-t border-slate-100 flex justify-end">
+              <button
+                type="submit"
+                disabled={passwordSaving}
+                className="inline-flex items-center gap-2 rounded-xl bg-blue-600 px-5 py-2.5 text-sm font-semibold text-white shadow-sm transition-all hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                <KeyRound className="h-4 w-4" />
+                {passwordSaving ? 'Updating password...' : 'Change Password'}
+              </button>
+            </div>
+          </form>
+        </section>
       </div>
     </AppLayout>
   );

@@ -31,7 +31,8 @@ import {
   FolderKanban,
   CreditCard,
   KeyRound,
-  ArrowLeft
+  ArrowLeft,
+  UserRound
 } from 'lucide-react';
 
 export interface ProjectWorkspaceInfo {
@@ -77,6 +78,7 @@ function AppLayoutContent({
   const [sidebarOpen, setSidebarOpen] = React.useState(false);
   const [profileName, setProfileName] = React.useState<string | null>(userName || null);
   const displayName = profileName || userName || 'User';
+  const roleLabel = `${userRole.charAt(0).toUpperCase()}${userRole.slice(1)}`;
 
   React.useEffect(() => {
     if (!sidebarOpen) return;
@@ -256,7 +258,15 @@ function AppLayoutContent({
           </Link>
         </div>
 
-        <div className="w-7" aria-hidden="true" />
+        <div className="flex min-w-0 items-center gap-2 pl-2">
+          <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-slate-100 text-slate-500 ring-1 ring-slate-200">
+            <UserRound className="h-4 w-4" aria-hidden="true" />
+          </span>
+          <span className="flex min-w-0 flex-col leading-tight">
+            <span className="max-w-24 truncate text-[11px] font-semibold text-slate-800">{displayName}</span>
+            <span className="text-[10px] text-slate-500">{roleLabel}</span>
+          </span>
+        </div>
       </div>
 
       {/* Persistent role navigation with an independently scrolling menu and anchored logout */}
@@ -292,12 +302,12 @@ function AppLayoutContent({
           {/* User Status Bar */}
           <div className="px-4 py-3 border-b border-slate-100/80 flex items-center justify-between bg-slate-50/60 shrink-0">
             <div className="flex items-center gap-3 min-w-0">
-              <div className="w-9 h-9 rounded-xl bg-emerald-50 text-emerald-800 font-bold flex items-center justify-center text-xs shrink-0 border border-emerald-100">
-                {displayName.charAt(0).toUpperCase()}
+              <div className="w-9 h-9 rounded-full bg-emerald-50 text-emerald-800 flex items-center justify-center shrink-0 border border-emerald-100">
+                <UserRound className="h-4 w-4" aria-hidden="true" />
               </div>
-              <div className="truncate">
+              <div className="flex min-w-0 flex-col leading-tight">
                 <div className="text-xs font-semibold text-slate-800 truncate">{displayName}</div>
-                <div className="text-[10px] text-slate-400 capitalize">{userRole} workspace</div>
+                <div className="mt-0.5 text-[10px] text-slate-500">{roleLabel}</div>
               </div>
             </div>
           </div>
@@ -419,8 +429,14 @@ function AppLayoutContent({
             )}
           </div>
 
-          <div className="rounded-xl border border-slate-200 bg-white px-3.5 py-1.5 text-xs text-slate-800 shadow-2xs">
-            <span className="font-semibold">{displayName}</span>
+          <div className="flex items-center gap-2.5 rounded-xl border border-slate-200 bg-white px-3.5 py-2 text-slate-800 shadow-2xs">
+            <span className="flex h-9 w-9 items-center justify-center rounded-full bg-slate-100 text-slate-500 ring-1 ring-slate-200">
+              <UserRound className="h-4 w-4" aria-hidden="true" />
+            </span>
+            <span className="flex min-w-0 flex-col leading-tight">
+              <span className="max-w-40 truncate text-xs font-semibold">{displayName}</span>
+              <span className="mt-0.5 text-[10px] text-slate-500">{roleLabel}</span>
+            </span>
           </div>
         </header>
 
