@@ -13,9 +13,9 @@ type Expense = { name: string; description: string; amount: string };
 type DetailedProposal = { materials?: Material[]; labor?: Labor[]; equipment?: Equipment[]; overhead?: Expense[]; profit?: { amount?: number }; contingency?: { amount?: number }; taxes?: { amount?: number } };
 type ProposalTab = 'overview' | 'materials' | 'labor' | 'machinery' | 'costs';
 
-const blankMaterial = (): Material => ({ name: '', quantity: '1', unit: '', unitPrice: '' });
-const blankLabor = (): Labor => ({ position: '', workers: '1', dailyRate: '', days: '1' });
-const blankEquipment = (): Equipment => ({ name: '', quantity: '1', rate: '', duration: '1', arrangement: 'rental', fuel: '0', maintenance: '0' });
+const blankMaterial = (): Material => ({ name: '', quantity: '', unit: '', unitPrice: '' });
+const blankLabor = (): Labor => ({ position: '', workers: '', dailyRate: '', days: '' });
+const blankEquipment = (): Equipment => ({ name: '', quantity: '', rate: '', duration: '', arrangement: '', fuel: '', maintenance: '' });
 const blankExpense = (): Expense => ({ name: '', description: '', amount: '' });
 const money = (value: string | number) => Math.round((typeof value === 'string' ? parseNumberInput(value) : Number(value) || 0) * 100) / 100;
 const sum = (values: number[]) => money(values.reduce((total, value) => total + value, 0));
@@ -61,14 +61,18 @@ export default function ContractorCostBreakdownModal({ project, existingQuote, i
   const remove = <T,>(setter: React.Dispatch<React.SetStateAction<T[]>>, index: number) => setter(items => items.length === 1 ? items : items.filter((_, itemIndex) => itemIndex !== index));
   const validate = () => {
     const required = (value: string) => value.trim() !== '' && Number.isFinite(parseNumberInput(value)) && parseNumberInput(value) >= 0;
+    const enteredMaterials = materials.filter(item => item.name || item.quantity || item.unit || item.unitPrice);
+    const enteredLabor = labor.filter(item => item.position || item.workers || item.dailyRate || item.days);
+    const enteredEquipment = equipment.filter(item => item.name || item.quantity || item.rate || item.duration || item.arrangement || item.fuel || item.maintenance);
+    const enteredOverhead = overhead.filter(item => item.name || item.description || item.amount);
     if (!required(duration) || !Number.isInteger(Number(duration)) || Number(duration) <= 0) {
       return 'Enter the estimated construction duration as a whole number of months.';
     }
-    if (!proposedStartDate) return 'Select a proposed start date.';
-    if (!materials.every(item => item.name && required(item.quantity) && item.unit && required(item.unitPrice))) return 'Every material requires a name, quantity, unit, and non-negative unit price.';
-    if (!labor.every(item => item.position && required(item.workers) && parseNumberInput(item.workers) > 0 && required(item.dailyRate) && required(item.days) && parseNumberInput(item.days) > 0)) return 'Every labor position requires a position, workers, daily wage, and working days.';
-    if (!equipment.every(item => item.name && required(item.quantity) && required(item.rate) && required(item.duration))) return 'Every machine requires a name, quantity, rate, and duration.';
-    if (!overhead.every(item => item.name && item.description && required(item.amount))) return 'Every overhead expense needs an expense name, amount, and description.';
+    if (!enteredMaterials.every(item => item.name.trim() && required(item.quantity) && parseNumberInput(item.quantity) > 0 && item.unit.trim() && required(item.unitPrice))) return 'Complete each material row you started, or clear it.';
+    if (!enteredLabor.every(item => item.position.trim() && required(item.workers) && parseNumberInput(item.workers) > 0 && required(item.dailyRate) && required(item.days) && parseNumberInput(item.days) > 0)) return 'Complete each labor row you started, or clear it.';
+    if (!enteredEquipment.every(item => item.name.trim() && required(item.quantity) && parseNumberInput(item.quantity) > 0 && required(item.rate) && required(item.duration) && parseNumberInput(item.duration) > 0)) return 'Complete each machinery row you started, or clear it.';
+    if (!enteredOverhead.every(item => item.name.trim() && item.description.trim() && required(item.amount))) return 'Complete each other-cost row you started, or clear it.';
+    if ([profit, contingency, taxes].some(value => value && !required(value))) return 'Enter valid amounts for profit, contingency, and taxes.';
     if (!declaration) return 'Accept the contractor declaration before submitting.';
     if (totalAmount <= 0) return 'The calculated proposal total must be greater than ₱0.';
     return '';
@@ -93,15 +97,23 @@ export default function ContractorCostBreakdownModal({ project, existingQuote, i
       if (!user) throw new Error('Sign in before submitting a project proposal.');
       const now = new Date().toISOString();
       const detailed = {
-        materials: materials.map(item => ({ ...item, unitPrice: String(money(item.unitPrice)) })),
-        labor: labor.map(item => ({ ...item, dailyRate: String(money(item.dailyRate)) })),
-        equipment: equipment.map(item => ({
+        materials: materials
+          .filter(item => item.name || item.quantity || item.unit || item.unitPrice)
+          .map(item => ({ ...item, unitPrice: String(money(item.unitPrice)) })),
+        labor: labor
+          .filter(item => item.position || item.workers || item.dailyRate || item.days)
+          .map(item => ({ ...item, dailyRate: String(money(item.dailyRate)) })),
+        equipment: equipment
+          .filter(item => item.name || item.quantity || item.rate || item.duration || item.arrangement || item.fuel || item.maintenance)
+          .map(item => ({
           ...item,
           rate: String(money(item.rate)),
           fuel: String(money(item.fuel)),
           maintenance: String(money(item.maintenance)),
         })),
-        overhead: overhead.map(item => ({ ...item, amount: String(money(item.amount)) })),
+        overhead: overhead
+          .filter(item => item.name || item.description || item.amount)
+          .map(item => ({ ...item, amount: String(money(item.amount)) })),
         profit: { amount: money(profit) },
         contingency: { amount: money(contingency) },
         taxes: { amount: money(taxes) },
@@ -111,7 +123,7 @@ export default function ContractorCostBreakdownModal({ project, existingQuote, i
       const { data, error } = await supabase.from('quotes').upsert({
         project_id: project.id, contractor_id: user.id, materials_subtotal: materialTotal, labor_cost: laborTotal, equipment_cost: equipmentTotal, logistics_cost: 0,
         overhead_profit_cost: sum([overheadTotal, money(profit)]), other_charges: 0, taxes_cost: money(taxes), total_materials_quotation: materialTotal, delivery_charges: 0,
-        price: totalAmount, duration_months: Number.parseInt(duration, 10), proposed_start_date: proposedStartDate,
+        price: totalAmount, duration_months: Number.parseInt(duration, 10), proposed_start_date: proposedStartDate || null,
         payment_terms: existingQuote?.payment_terms ?? null,
         work_methodology: existingQuote?.work_methodology ?? null,
         scope_of_work: existingQuote?.scope_of_work ?? null,
@@ -138,12 +150,12 @@ export default function ContractorCostBreakdownModal({ project, existingQuote, i
     onChange: (value: string) => void,
     numeric = false,
     type: 'text' | 'date' = 'text',
-    numericOptions: { min?: string; step?: string; formatThousands?: boolean } = {},
+    numericOptions: { min?: string; step?: string; formatThousands?: boolean; required?: boolean } = {},
   ) => (
     <label className="block text-xs font-semibold leading-5 text-slate-700">
       {label}
       <input
-        required
+        required={numericOptions.required}
         type={numeric && !numericOptions.formatThousands ? 'number' : type}
         inputMode={numericOptions.formatThousands ? 'decimal' : undefined}
         min={numeric && !numericOptions.formatThousands ? numericOptions.min ?? '0' : undefined}
@@ -220,7 +232,7 @@ export default function ContractorCostBreakdownModal({ project, existingQuote, i
         ))}
         <button type="button" onClick={() => add(setOverhead, blankExpense())} className="inline-flex items-center gap-1.5 rounded-lg border border-blue-200 bg-blue-50 px-3 py-2 text-xs font-bold text-blue-700"><Plus className="h-3.5 w-3.5" /> Add overhead expense</button>
         <div className="grid gap-3 rounded-xl border border-slate-200 bg-white p-3 sm:grid-cols-3">
-          {input("Contractor's profit", profit, setProfit, true)}
+          {input("Contractor's profit", profit, setProfit, true, 'text', { formatThousands: true })}
           {input('Contingency allowance', contingency, setContingency, true, 'text', { formatThousands: true })}
           {input('Taxes and charges', taxes, setTaxes, true, 'text', { formatThousands: true })}
         </div>
@@ -300,7 +312,7 @@ export default function ContractorCostBreakdownModal({ project, existingQuote, i
             {errorMessage && <div role="alert" className="mb-3 flex shrink-0 items-center gap-2 rounded-lg border border-rose-200 bg-rose-50 p-2.5 text-xs text-rose-800"><AlertCircle className="h-4 w-4 shrink-0" />{errorMessage}</div>}
             {activeTab === 'overview' ? (
               <section className="grid flex-1 content-start gap-3 rounded-xl border border-slate-200 bg-white p-4 sm:grid-cols-2">
-                <div>{input('Estimated construction duration (months)', duration, setDuration, true, 'text', { min: '1', step: '1' })}</div>
+                <div>{input('Estimated construction duration (months)', duration, setDuration, true, 'text', { min: '1', step: '1', required: true })}</div>
                 <div>{input('Proposed start date', proposedStartDate, setProposedStartDate, false, 'date')}</div>
                 <div className="rounded-lg border border-blue-200 bg-blue-50 p-3 text-sm text-blue-900 sm:col-span-2">
                   <span className="block text-[10px] font-semibold uppercase tracking-wide text-blue-700">Calculated proposal total</span>
