@@ -35,22 +35,22 @@ type ProjectIdsPage = {
 };
 
 type ProjectListRow = Project & {
-  awardedQuote?: (Quote & { contractor_profile: ContractorProfile | null }) | null;
-  proposalQuotes?: Array<Quote & { contractor_profile: ContractorProfile | null }>;
-  contractor?: ContractorProfile | null;
-  contractorQuoteAmount?: number | null;
-  platformCommissionAmount?: number;
-  commissionPercent?: number;
-  agreedAmount?: number | null;
-  moneyReleased?: number;
-  moneyInEscrow?: number;
-  remainingBalance?: number | null;
-  completionPercentage?: number;
-  displayStatus?: string;
-  currentMilestone?: Milestone | null;
-  milestones?: Milestone[];
-  transactions?: Array<Record<string, unknown>>;
-  isBuildActive?: boolean;
+  awardedQuote: (Quote & { contractor_profile: ContractorProfile | null }) | null;
+  proposalQuotes: Array<Quote & { contractor_profile: ContractorProfile | null }>;
+  contractor: ContractorProfile | null;
+  contractorQuoteAmount: number | null;
+  platformCommissionAmount: number;
+  commissionPercent: number;
+  agreedAmount: number | null;
+  moneyReleased: number;
+  moneyInEscrow: number;
+  remainingBalance: number | null;
+  completionPercentage: number;
+  displayStatus: string;
+  currentMilestone: Milestone | null;
+  milestones: Milestone[];
+  transactions: Array<Record<string, unknown>>;
+  isBuildActive: boolean;
 };
 
 async function fetchAllProjectIds(
@@ -357,8 +357,8 @@ export default function HomeownerProjectsPage() {
       return {
         ...p,
         awardedQuote,
-        proposalQuotes,
-        contractor,
+        proposalQuotes: proposalQuotes ?? [],
+        contractor: contractor ?? null,
         contractorQuoteAmount,
         platformCommissionAmount,
         commissionPercent,
@@ -368,10 +368,10 @@ export default function HomeownerProjectsPage() {
         remainingBalance,
         completionPercentage,
         displayStatus: isComplete ? 'Completed' : projectMilestones.length > 0 ? 'In Progress' : 'Planning',
-        currentMilestone,
-        milestones: projectMilestones,
-        transactions: projectTx,
-        isBuildActive
+        currentMilestone: currentMilestone ?? null,
+        milestones: projectMilestones ?? [],
+        transactions: projectTx ?? [],
+        isBuildActive: Boolean(isBuildActive),
       };
     });
 
@@ -563,11 +563,16 @@ export default function HomeownerProjectsPage() {
         ) : (
           <div className="space-y-6">
             {projects.map((p) => {
-              const cleanMilestoneName = p.currentMilestone
-                ? cleanMilestoneTitle(p.currentMilestone.name)
+              const currentMilestone = p.currentMilestone;
+              const cleanMilestoneName = currentMilestone
+                ? cleanMilestoneTitle(currentMilestone.name)
                 : 'No milestone scheduled';
-              const isDisputed = p.currentMilestone?.status === 'disputed' || p.status === 'disputed';
-              const isProofSubmitted = p.currentMilestone?.status === 'proof_submitted';
+              const isDisputed = currentMilestone?.status === 'disputed' || p.status === 'disputed';
+              const isProofSubmitted = currentMilestone?.status === 'proof_submitted';
+              const currentMilestoneLabel = currentMilestone
+                ? (currentMilestone.seq == null ? cleanMilestoneName : `Stage ${currentMilestone.seq}: ${cleanMilestoneName}`)
+                : cleanMilestoneName;
+              const currentMilestoneStatus = currentMilestone?.status ?? 'in_progress';
 
               if (p.isBuildActive) {
                 return (
@@ -655,7 +660,7 @@ export default function HomeownerProjectsPage() {
                           <span>•</span>
                           <span className="flex items-center gap-1">
                             <HardHat className="w-3.5 h-3.5 text-blue-600" />
-                            Contractor: <strong className="text-slate-800 font-semibold">{p.contractor ? p.contractor.business_name : 'Pending Contractor Selection'}</strong>
+                            Contractor: <strong className="text-slate-800 font-semibold">{p.contractor?.business_name ?? 'Pending Contractor Selection'}</strong>
                           </span>
                         </div>
                       </div>
@@ -723,15 +728,15 @@ export default function HomeownerProjectsPage() {
                           </div>
                           <div className="flex items-center gap-2 flex-wrap">
                             <span className="font-bold text-slate-900 text-sm sm:text-base">
-                              {p.currentMilestone?.seq == null ? cleanMilestoneName : `Stage ${p.currentMilestone.seq}: ${cleanMilestoneName}`}
+                              {currentMilestoneLabel}
                             </span>
                             <span className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase ${isDisputed ? 'bg-amber-100 text-amber-800 border border-amber-200' :
                               isProofSubmitted ? 'bg-indigo-100 text-indigo-800' :
-                                p.currentMilestone?.status === 'in_progress' ? 'bg-blue-100 text-blue-800' :
-                                  p.currentMilestone?.status === 'paid' ? 'bg-emerald-100 text-emerald-800' :
+                                currentMilestoneStatus === 'in_progress' ? 'bg-blue-100 text-blue-800' :
+                                  currentMilestoneStatus === 'paid' ? 'bg-emerald-100 text-emerald-800' :
                                     'bg-slate-100 text-slate-600'
                               }`}>
-                              {removeUnderscore(p.currentMilestone?.status || 'In Progress')}
+                              {removeUnderscore(currentMilestoneStatus)}
                             </span>
                           </div>
                           <p className="text-xs text-slate-500">
