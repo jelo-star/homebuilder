@@ -46,7 +46,6 @@ import { calculateEstimate } from '@/lib/utils/estimator';
 import { useToast } from '@/components/ui/ToastProvider';
 import QuotationComparisonModal from '@/components/homeowner/QuotationComparisonModal';
 import RequestRevisionModal from '@/components/homeowner/RequestRevisionModal';
-import QuoteCostBreakdown from '@/components/quotes/QuoteCostBreakdown';
 
 type QuoteDisplayItem = {
   id: string;
@@ -1765,7 +1764,7 @@ function ProjectDetailsContent() {
                 </div>
 
                   {contractor ? (
-                  <div className="grid min-h-0 grid-cols-1 gap-4 text-xs xl:grid-cols-[minmax(230px,0.34fr)_minmax(0,0.66fr)]">
+                  <div className="grid min-h-0 grid-cols-1 gap-4 text-xs">
                     <div className="flex min-h-0 flex-col gap-2.5">
                       <div className="rounded-xl border border-slate-100 bg-slate-50/60 p-3">
                         <span className="text-slate-400 block text-[11px]">Builder Firm</span>
@@ -1802,11 +1801,6 @@ function ProjectDetailsContent() {
                         </Link>
                       </div>
                     </div>
-                    {awardedQuote && (
-                      <div className="min-h-0 overflow-hidden">
-                        <QuoteCostBreakdown quote={awardedQuote} title="Accepted Project Cost Breakdown" compact />
-                      </div>
-                    )}
                   </div>
                 ) : (
                   <div className="space-y-4">
