@@ -689,8 +689,115 @@ function ContractorProjectPlanContent() {
                 </button>
               </div>
 
-              {/* Table Component */}
-              <div className="overflow-x-auto">
+              {/* Small-screen milestone editor */}
+              <div className="space-y-3 p-3 lg:hidden">
+                {rows.map((row, index) => (
+                  <section key={row.id} className="rounded-xl border border-slate-200 bg-white p-3">
+                    <div className="mb-3 flex items-center justify-between gap-3">
+                      <h3 className="text-sm font-bold text-slate-800">Milestone {row.seq}</h3>
+                      <div className="flex items-center gap-1">
+                        <button
+                          type="button"
+                          onClick={() => handleMoveRow(index, 'up')}
+                          disabled={isPlanApproved || index === 0}
+                          className="rounded p-2 text-slate-600 hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-30"
+                          title="Move Up"
+                          aria-label={`Move milestone ${row.seq} up`}
+                        >
+                          <ArrowUp className="h-4 w-4" />
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => handleMoveRow(index, 'down')}
+                          disabled={isPlanApproved || index === rows.length - 1}
+                          className="rounded p-2 text-slate-600 hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-30"
+                          title="Move Down"
+                          aria-label={`Move milestone ${row.seq} down`}
+                        >
+                          <ArrowDown className="h-4 w-4" />
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => handleRemoveRow(row.id)}
+                          disabled={isPlanApproved}
+                          className="rounded p-2 text-red-500 hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-30"
+                          title="Delete Milestone"
+                          aria-label={`Delete milestone ${row.seq}`}
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </button>
+                      </div>
+                    </div>
+
+                    <div className="space-y-3">
+                      <label className="block text-xs font-semibold text-slate-600">
+                        Milestone Name
+                        <input
+                          type="text"
+                          value={row.name}
+                          onChange={e => handleUpdateRow(row.id, 'name', e.target.value)}
+                          disabled={isPlanApproved}
+                          placeholder="Enter milestone name"
+                          className="mt-1 w-full min-w-0 rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-800 outline-hidden focus:border-[#136F48] focus:ring-1 focus:ring-[#136F48]"
+                        />
+                      </label>
+
+                      <label className="block text-xs font-semibold text-slate-600">
+                        Description
+                        <input
+                          type="text"
+                          value={row.description}
+                          onChange={e => handleUpdateRow(row.id, 'description', e.target.value)}
+                          disabled={isPlanApproved}
+                          placeholder="Scope of works in this stage"
+                          className="mt-1 w-full min-w-0 rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700 outline-hidden focus:border-[#136F48] focus:ring-1 focus:ring-[#136F48]"
+                        />
+                      </label>
+
+                      <label className="block text-xs font-semibold text-slate-600">
+                        Amount (PHP)
+                        <div className="relative mt-1">
+                          <span className="absolute left-3 top-1/2 -translate-y-1/2 font-bold text-slate-400">₱</span>
+                          <input
+                            type="text"
+                            inputMode="decimal"
+                            value={row.amount ? formatNumberInput(String(row.amount)) : ''}
+                            onChange={e => handleUpdateRow(row.id, 'amount', formatNumberInput(e.target.value))}
+                            disabled={isPlanApproved}
+                            className="w-full min-w-0 rounded-lg border border-slate-200 bg-white py-2 pl-8 pr-3 font-mono text-sm font-bold text-slate-900 outline-hidden focus:border-[#136F48] focus:ring-1 focus:ring-[#136F48]"
+                          />
+                        </div>
+                      </label>
+
+                      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                        <label className="block text-xs font-semibold text-slate-600">
+                          Start Date
+                          <input
+                            type="date"
+                            value={row.start_date}
+                            onChange={e => handleUpdateRow(row.id, 'start_date', e.target.value)}
+                            disabled={isPlanApproved}
+                            className="mt-1 w-full min-w-0 rounded-lg border border-slate-200 bg-white px-2 py-2 text-sm text-slate-700 outline-hidden focus:border-[#136F48] focus:ring-1 focus:ring-[#136F48]"
+                          />
+                        </label>
+                        <label className="block text-xs font-semibold text-slate-600">
+                          End Date
+                          <input
+                            type="date"
+                            value={row.end_date}
+                            onChange={e => handleUpdateRow(row.id, 'end_date', e.target.value)}
+                            disabled={isPlanApproved}
+                            className="mt-1 w-full min-w-0 rounded-lg border border-slate-200 bg-white px-2 py-2 text-sm text-slate-700 outline-hidden focus:border-[#136F48] focus:ring-1 focus:ring-[#136F48]"
+                          />
+                        </label>
+                      </div>
+                    </div>
+                  </section>
+                ))}
+              </div>
+
+              {/* Spreadsheet for larger screens */}
+              <div className="hidden overflow-x-auto lg:block">
                 <table className="w-full text-left text-xs border-collapse">
                   <thead>
                     <tr className="bg-slate-100/80 text-slate-700 font-bold border-b border-slate-200 text-[11px]">

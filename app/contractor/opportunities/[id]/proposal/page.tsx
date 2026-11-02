@@ -46,7 +46,8 @@ function ContractorProposalPageContent() {
         supabase.from('quotes').select('*').eq('project_id', projectId).eq('contractor_id', user.id).maybeSingle(),
         supabase.from('profiles').select('full_name').eq('id', user.id).maybeSingle(),
       ]);
-      if (projectError) setError(projectError.message);
+      if (projectError?.code === 'PGRST116') setError('This project opportunity is no longer available to your account.');
+      else if (projectError) setError(projectError.message);
       else if (quoteError) setError(quoteError.message);
       else setProject(projectData as Project);
       setQuote((quoteData as Quote | null) || null);
