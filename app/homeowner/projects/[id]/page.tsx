@@ -759,7 +759,7 @@ function ProjectDetailsContent() {
     }
 
     setSelectedMilestoneForPayment(milestone);
-    setProofForm(prev => ({ ...prev, customPaymentAmount: amountDue.toFixed(2) }));
+    setProofForm(prev => ({ ...prev, customPaymentAmount: String(Math.round(amountDue)) }));
     setMilestoneToApprove(null);
     setIsPaymentModalOpen(true);
     setErrorMsg('');

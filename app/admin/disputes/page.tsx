@@ -672,7 +672,7 @@ export default function AdminDisputesPage() {
                         Contested Escrow
                       </span>
                       <strong className="font-mono text-xs">
-                        ₱{disputedEscrowAmount.toLocaleString('en-US', { minimumFractionDigits: 2 })}
+                        ₱{disputedEscrowAmount.toLocaleString('en-US', { maximumFractionDigits: 0 })}
                       </strong>
                     </div>
 
@@ -758,7 +758,7 @@ export default function AdminDisputesPage() {
                                   {milestoneName}
                                 </span>
                                 <span className="text-[10px] text-slate-400 block font-mono">
-                                  ₱{amount.toLocaleString('en-US', { minimumFractionDigits: 2 })} in Vault
+                                  ₱{amount.toLocaleString('en-US', { maximumFractionDigits: 0 })} in Vault
                                 </span>
                               </td>
 
@@ -1108,7 +1108,7 @@ export default function AdminDisputesPage() {
                 <div className="flex justify-between">
                   <span className="text-slate-500">Escrow Value at Stake:</span>
                   <span className="font-mono font-bold text-slate-900 text-sm">
-                    ₱{(Number(viewingDispute.contractor_amount) || Number(viewingDispute.homeowner_amount) || 0).toLocaleString('en-US', { minimumFractionDigits: 2 })}
+                    ₱{(Number(viewingDispute.contractor_amount) || Number(viewingDispute.homeowner_amount) || 0).toLocaleString('en-US', { maximumFractionDigits: 0 })}
                   </span>
                 </div>
                 <div className="flex justify-between">
@@ -1295,7 +1295,7 @@ export default function AdminDisputesPage() {
                   <option value="">Select milestone to contest...</option>
                   {milestones.filter(m => !logForm.projectId || m.project_id === logForm.projectId).map(m => (
                     <option key={m.id} value={m.name}>
-                      {m.name} (₱{Number(m.amount).toLocaleString('en-US', { minimumFractionDigits: 2 })})
+                      {m.name} (₱{Number(m.amount).toLocaleString('en-US', { maximumFractionDigits: 0 })})
                     </option>
                   ))}
                 </select>

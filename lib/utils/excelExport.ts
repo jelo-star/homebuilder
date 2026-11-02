@@ -108,10 +108,10 @@ export function exportProjectToExcel(data: ProjectExportData) {
     ['Contract Duration', quote?.duration_months ? `${quote.duration_months} Months` : 'Pending Award'],
     [''],
     ['FINANCIAL AUDIT & ESCROW SAFEKEEPING (PHP)', ''],
-    [contractor ? 'Total Agreed Cost (₱)' : 'Estimated Project Cost (₱)', agreedAmount.toFixed(2)],
-    ['Total Funds Released to Builder (₱)', moneyReleased.toFixed(2)],
-    ['Funds Secured in Escrow Vault (₱)', moneyInEscrow.toFixed(2)],
-    [contractor ? 'Remaining Contract Balance (₱)' : 'Contract Status', contractor ? remainingBalance.toFixed(2) : 'Open for Bidding'],
+    [contractor ? 'Total Agreed Cost (₱)' : 'Estimated Project Cost (₱)', Math.round(agreedAmount)],
+    ['Total Funds Released to Builder (₱)', Math.round(moneyReleased)],
+    ['Funds Secured in Escrow Vault (₱)', Math.round(moneyInEscrow)],
+    [contractor ? 'Remaining Contract Balance (₱)' : 'Contract Status', contractor ? Math.round(remainingBalance) : 'Open for Bidding'],
     ['Milestones Verified Completed', `${completedMilestones} of ${totalMilestones} (${progressPct}%)`]
   ];
 
@@ -178,7 +178,7 @@ export function exportProjectToExcel(data: ProjectExportData) {
         t.transaction_ref || '—',
         t.provider_tx_ref || '—',
         (t.provider || t.payment_method || 'Bank Transfer').toUpperCase(),
-        (((t.amount_centavos || 0) / 100) || 0).toFixed(2),
+        Math.round(((t.amount_centavos || 0) / 100) || 0),
         (t.payment_status || 'PENDING').replace(/_/g, ' '),
         t.created_at ? new Date(t.created_at).toLocaleDateString() : '—',
         t.payment_status === 'SUCCEEDED' ? 'Funds verified and held in escrow vault' : 'Awaiting verification audit'
@@ -188,7 +188,7 @@ export function exportProjectToExcel(data: ProjectExportData) {
           'TXN-INIT-001',
           'BNK-882194',
           'BANK TRANSFER (BDO)',
-          moneyReleased.toFixed(2),
+          Math.round(moneyReleased),
           'SUCCEEDED',
           new Date(Date.now() - 20 * 86400000).toLocaleDateString(),
           'Funds verified and disbursed upon stage completion'
@@ -254,8 +254,8 @@ export function exportProjectToExcel(data: ProjectExportData) {
     item.specifications || 'Standard specifications',
     item.quantity,
     item.unit,
-    Number(item.unit_price).toFixed(2),
-    Number(item.line_total).toFixed(2),
+    Math.round(Number(item.unit_price)),
+    Math.round(Number(item.line_total)),
     item.supplier || contractor?.business_name || 'Verified Supplier'
   ]);
 
@@ -263,12 +263,12 @@ export function exportProjectToExcel(data: ProjectExportData) {
     ['OFFICIAL MATERIALS QUOTATION & BILL OF QUANTITIES (BOQ)'],
     [`Project: ${project.title}`],
     [`Builder: ${contractor?.business_name || 'Apex Builders Construction Co.'}`],
-    [`Total Quotation Amount: ₱${totalBOQAmount.toLocaleString('en-PH', { minimumFractionDigits: 2 })}`],
+    [`Total Quotation Amount: ₱${totalBOQAmount.toLocaleString('en-PH', { maximumFractionDigits: 0 })}`],
     [''],
     materialsHeader,
     ...materialsRows,
     [''],
-    ['TOTAL MATERIALS QUOTATION (BOQ):', '', '', '', '', '', '', `₱${totalBOQAmount.toLocaleString('en-PH', { minimumFractionDigits: 2 })}`, '']
+    ['TOTAL MATERIALS QUOTATION (BOQ):', '', '', '', '', '', '', `₱${totalBOQAmount.toLocaleString('en-PH', { maximumFractionDigits: 0 })}`, '']
   ]);
 
   wsMaterials['!cols'] = [
@@ -294,4 +294,3 @@ export function exportProjectToExcel(data: ProjectExportData) {
   const safeFilename = `${project.title.replace(/[^a-zA-Z0-9_-]/g, '_')}_Financial_Report.xlsx`;
   XLSX.writeFile(wb, safeFilename);
 }
-

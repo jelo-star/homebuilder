@@ -262,7 +262,7 @@ function AdminProjectDetailContent() {
                   {isAwarded ? 'Agreed Project Cost' : 'Budget Estimate'}
                 </span>
                 <div className="text-3xl font-black text-slate-900 font-mono text-emerald-700">
-                  ₱{projectCost.toLocaleString('en-US', { minimumFractionDigits: 2 })}
+                  ₱{projectCost.toLocaleString('en-US', { maximumFractionDigits: 0 })}
                 </div>
                 {isAwarded && project.est_mid && (
                   <div className="text-[11px] text-slate-400 font-mono mt-0.5">
@@ -280,7 +280,7 @@ function AdminProjectDetailContent() {
                 {isAwarded ? 'Total Contract' : 'Target Budget'}
               </span>
               <div className="text-base font-black text-slate-900 font-mono mt-0.5">
-                ₱{projectCost.toLocaleString('en-US', { minimumFractionDigits: 2 })}
+                ₱{projectCost.toLocaleString('en-US', { maximumFractionDigits: 0 })}
               </div>
               <span className="text-[10px] text-slate-500 font-medium">
                 {isAwarded ? '100% agreed contract' : 'Homeowner budget target'}
@@ -293,7 +293,7 @@ function AdminProjectDetailContent() {
                 <span>In Safekeeping Vault</span>
               </span>
               <div className="text-base font-black text-emerald-800 font-mono mt-0.5">
-                ₱{inSafekeepingVault.toLocaleString('en-US', { minimumFractionDigits: 2 })}
+                ₱{inSafekeepingVault.toLocaleString('en-US', { maximumFractionDigits: 0 })}
               </div>
               <span className="text-[10px] text-emerald-600 font-medium">
                 {isAwarded ? `${fundedPercent}% funded by homeowner` : '0.0% funded (Awaiting award)'}
@@ -303,7 +303,7 @@ function AdminProjectDetailContent() {
             <div className="p-4 sm:p-5">
               <span className="text-[10px] uppercase font-bold text-indigo-700 block tracking-wider">Disbursed to Contractor</span>
               <div className="text-base font-black text-indigo-900 font-mono mt-0.5">
-                ₱{disbursedToContractor.toLocaleString('en-US', { minimumFractionDigits: 2 })}
+                ₱{disbursedToContractor.toLocaleString('en-US', { maximumFractionDigits: 0 })}
               </div>
               <span className="text-[10px] text-slate-500 font-medium">
                 {disbursedToContractor > 0 
@@ -315,7 +315,7 @@ function AdminProjectDetailContent() {
             <div className="p-4 sm:p-5">
               <span className="text-[10px] uppercase font-bold text-slate-400 block tracking-wider">Remaining Due</span>
               <div className="text-base font-black text-slate-700 font-mono mt-0.5">
-                ₱{remainingBalance.toLocaleString('en-US', { minimumFractionDigits: 2 })}
+                ₱{remainingBalance.toLocaleString('en-US', { maximumFractionDigits: 0 })}
               </div>
               <span className="text-[10px] text-slate-500 font-medium">
                 {isAwarded ? 'Subsequent progress stages' : 'Unfunded (open for bidding)'}
@@ -337,7 +337,7 @@ function AdminProjectDetailContent() {
                     Active Homeowner Complaint on {contestedMilestone?.name || 'Milestone'}
                   </h3>
                   <span className="px-2 py-0.5 rounded-full text-[10px] font-bold uppercase bg-amber-200 text-amber-900">
-                    Escrow Frozen (₱{contestedEscrowAmount.toLocaleString('en-US', { minimumFractionDigits: 2 })})
+                    Escrow Frozen (₱{contestedEscrowAmount.toLocaleString('en-US', { maximumFractionDigits: 0 })})
                   </span>
                 </div>
                 <p className="text-xs text-amber-900 mt-1 leading-relaxed italic">
@@ -452,7 +452,7 @@ function AdminProjectDetailContent() {
                           <div className="text-[11px] text-slate-500 flex items-center gap-2 mt-0.5">
                             <span>Escrow Allocation:</span>
                             <strong className="text-slate-900 font-mono font-bold">
-                              ₱{Number(m.amount).toLocaleString('en-US', { minimumFractionDigits: 2 })}
+                              ₱{Number(m.amount).toLocaleString('en-US', { maximumFractionDigits: 0 })}
                             </strong>
                           </div>
                         </div>
@@ -591,7 +591,7 @@ function AdminProjectDetailContent() {
                 <div className="text-right">
                   <span className="text-[10px] uppercase font-bold text-slate-400 block">Accepted Price</span>
                   <span className="text-2xl font-black text-slate-900 font-mono text-blue-700">
-                    ₱{projectCost.toLocaleString('en-US', { minimumFractionDigits: 2 })}
+                    ₱{projectCost.toLocaleString('en-US', { maximumFractionDigits: 0 })}
                   </span>
                 </div>
 

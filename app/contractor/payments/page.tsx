@@ -536,7 +536,7 @@ export default function ContractorPaymentsPage() {
                             {tx.provider_tx_ref || '—'}
                           </td>
                           <td className="py-3.5 px-4 font-mono font-bold text-slate-900">
-                            ₱{((tx.amount_centavos || 0) / 100).toLocaleString('en-US', { minimumFractionDigits: 2 })}
+                            ₱{((tx.amount_centavos || 0) / 100).toLocaleString('en-US', { maximumFractionDigits: 0 })}
                           </td>
                           <td className="py-3.5 px-4">
                             {isPaid ? (
@@ -770,7 +770,7 @@ export default function ContractorPaymentsPage() {
                   <div className="text-right">
                     <div className="text-[10px] uppercase font-bold text-emerald-600 tracking-wider">Amount Received</div>
                     <div className="text-lg font-black text-emerald-900 font-mono">
-                      ₱{inspectingPayoutProof.amount.toLocaleString('en-US', { minimumFractionDigits: 2 })}
+                      ₱{inspectingPayoutProof.amount.toLocaleString('en-US', { maximumFractionDigits: 0 })}
                     </div>
                   </div>
                 </div>

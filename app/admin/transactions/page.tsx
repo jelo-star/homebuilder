@@ -327,7 +327,7 @@ export default function AdminTransactionsPage() {
       setTransactions(prev => prev.map(t => t.id === tx.id ? updatedTx : t));
       setReviewingTx(null);
       setActionNotice({
-        text: `Verified ₱${((tx.amount_centavos || 0) / 100).toLocaleString('en-US', { minimumFractionDigits: 2 })} into Safekeeping Vault!`,
+        text: `Verified ₱${((tx.amount_centavos || 0) / 100).toLocaleString('en-US', { maximumFractionDigits: 0 })} into Safekeeping Vault!`,
         type: 'success'
       });
     } catch (err: unknown) {
@@ -392,7 +392,7 @@ export default function AdminTransactionsPage() {
       setTransferNotes('');
 
       setActionNotice({
-        text: `Successfully transferred ₱${numericAmount.toLocaleString('en-US', { minimumFractionDigits: 2 })} to the contractor.`,
+        text: `Successfully transferred ₱${numericAmount.toLocaleString('en-US', { maximumFractionDigits: 0 })} to the contractor.`,
         type: 'success'
       });
     } catch (err: unknown) {
@@ -588,7 +588,7 @@ export default function AdminTransactionsPage() {
                     <div className="px-3 py-1 bg-white rounded-xl border border-slate-200">
                       <span className="text-[10px] text-slate-400 block uppercase font-bold">Total Contract</span>
                       <strong className="text-slate-900 font-mono">
-                        ₱{proj.contractPrice.toLocaleString('en-US', { minimumFractionDigits: 2 })}
+                        ₱{proj.contractPrice.toLocaleString('en-US', { maximumFractionDigits: 0 })}
                       </strong>
                     </div>
 
@@ -598,21 +598,21 @@ export default function AdminTransactionsPage() {
                         <span>In Safekeeping Vault</span>
                       </span>
                       <strong className="text-emerald-900 font-mono">
-                        ₱{projVaultBalance.toLocaleString('en-US', { minimumFractionDigits: 2 })}
+                        ₱{projVaultBalance.toLocaleString('en-US', { maximumFractionDigits: 0 })}
                       </strong>
                     </div>
 
                     <div className="px-3 py-1 bg-indigo-50 rounded-xl border border-indigo-200">
                       <span className="text-[10px] text-indigo-600 block uppercase font-bold">Transferred</span>
                       <strong className="text-indigo-900 font-mono">
-                        ₱{projDisbursed.toLocaleString('en-US', { minimumFractionDigits: 2 })}
+                        ₱{projDisbursed.toLocaleString('en-US', { maximumFractionDigits: 0 })}
                       </strong>
                     </div>
 
                     <div className="px-3 py-1 bg-slate-50 rounded-xl border border-slate-200">
                       <span className="text-[10px] text-slate-400 block uppercase font-bold">Remaining Due</span>
                       <strong className="text-slate-700 font-mono">
-                        ₱{projRemaining.toLocaleString('en-US', { minimumFractionDigits: 2 })}
+                        ₱{projRemaining.toLocaleString('en-US', { maximumFractionDigits: 0 })}
                       </strong>
                     </div>
                   </div>
@@ -673,7 +673,7 @@ export default function AdminTransactionsPage() {
 
                               {/* 4. AMOUNT */}
                               <td className="py-3 px-4 font-mono font-black text-slate-900 text-sm">
-                                ₱{((tx.amount_centavos || 0) / 100).toLocaleString('en-US', { minimumFractionDigits: 2 })}
+                                ₱{((tx.amount_centavos || 0) / 100).toLocaleString('en-US', { maximumFractionDigits: 0 })}
                               </td>
 
                               {/* 5. PROOF */}
@@ -850,7 +850,7 @@ export default function AdminTransactionsPage() {
                 <div className="flex justify-between pt-2 border-t border-slate-200">
                   <span className="font-bold text-slate-700">Amount to Confirm:</span>
                   <span className="font-mono font-black text-slate-900 text-base text-emerald-700">
-                    ₱{((reviewingTx.amount_centavos || 0) / 100).toLocaleString('en-US', { minimumFractionDigits: 2 })}
+                    ₱{((reviewingTx.amount_centavos || 0) / 100).toLocaleString('en-US', { maximumFractionDigits: 0 })}
                   </span>
                 </div>
               </div>
@@ -1201,7 +1201,7 @@ export default function AdminTransactionsPage() {
                 <div className="text-right">
                   <div className="text-[10px] uppercase font-bold text-indigo-500 tracking-wider">Amount Sent</div>
                   <div className="text-lg font-black text-indigo-900 font-mono">
-                    ₱{inspectingPayoutProof.amount.toLocaleString('en-US', { minimumFractionDigits: 2 })}
+                    ₱{inspectingPayoutProof.amount.toLocaleString('en-US', { maximumFractionDigits: 0 })}
                   </div>
                 </div>
               </div>

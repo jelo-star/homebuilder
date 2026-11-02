@@ -257,7 +257,7 @@ export default function AdminProjectsPage() {
                         {/* 5. COST (When awarded, shows actual project cost/contract price) */}
                         <td className="px-4 py-3.5">
                           <div className="font-mono font-black text-slate-900 text-sm">
-                            ₱{projectCost.toLocaleString('en-US', { minimumFractionDigits: 2 })}
+                            ₱{projectCost.toLocaleString('en-US', { maximumFractionDigits: 0 })}
                           </div>
                           {isAwardedOrProgress ? (
                             <span className="text-[10px] font-bold text-emerald-700 font-sans block">

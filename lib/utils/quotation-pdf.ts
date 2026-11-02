@@ -52,8 +52,8 @@ const numberValue = (value: string | number | null | undefined) => {
 };
 
 const currency = (value: number) => `PHP ${value.toLocaleString('en-PH', {
-  minimumFractionDigits: 2,
-  maximumFractionDigits: 2,
+  minimumFractionDigits: 0,
+  maximumFractionDigits: 0,
 })}`;
 
 const safeText = (value: string | number | null | undefined) =>
