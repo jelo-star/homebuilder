@@ -4,7 +4,7 @@ import React from 'react';
 import { AlertCircle, ArrowLeft, ClipboardList, HardHat, Plus, Send, Tractor, Users, Wrench, Trash2, X } from 'lucide-react';
 import { createClient } from '@/lib/supabase/client';
 import type { Project, Quote } from '@/types/database';
-import { formatCurrency } from '@/lib/utils/formatters';
+import { formatCurrency, formatNumberInput, parseNumberInput } from '@/lib/utils/formatters';
 
 type Material = { name: string; quantity: string; unit: string; unitPrice: string };
 type Labor = { position: string; workers: string; dailyRate: string; days: string };
@@ -17,7 +17,7 @@ const blankMaterial = (): Material => ({ name: '', quantity: '1', unit: '', unit
 const blankLabor = (): Labor => ({ position: '', workers: '1', dailyRate: '', days: '1' });
 const blankEquipment = (): Equipment => ({ name: '', quantity: '1', rate: '', duration: '1', arrangement: 'rental', fuel: '0', maintenance: '0' });
 const blankExpense = (): Expense => ({ name: '', description: '', amount: '' });
-const money = (value: string | number) => Math.round((Number(value) || 0) * 100) / 100;
+const money = (value: string | number) => Math.round((typeof value === 'string' ? parseNumberInput(value) : Number(value) || 0) * 100) / 100;
 const sum = (values: number[]) => money(values.reduce((total, value) => total + value, 0));
 
 interface ContractorCostBreakdownModalProps {
@@ -31,13 +31,18 @@ interface ContractorCostBreakdownModalProps {
 
 export default function ContractorCostBreakdownModal({ project, existingQuote, isOpen, onClose, onSuccess, mode = 'modal' }: ContractorCostBreakdownModalProps) {
   const saved = existingQuote?.material_quotation as DetailedProposal | null | undefined;
-  const [materials, setMaterials] = React.useState(saved?.materials || [blankMaterial()]);
-  const [labor, setLabor] = React.useState(saved?.labor || [blankLabor()]);
-  const [equipment, setEquipment] = React.useState(saved?.equipment || [blankEquipment()]);
-  const [overhead, setOverhead] = React.useState(saved?.overhead || [blankExpense()]);
-  const [profit, setProfit] = React.useState(saved?.profit?.amount == null ? '' : String(saved.profit.amount));
-  const [contingency, setContingency] = React.useState(saved?.contingency?.amount == null ? '' : String(saved.contingency.amount));
-  const [taxes, setTaxes] = React.useState(saved?.taxes?.amount == null ? '' : String(saved.taxes.amount));
+  const [materials, setMaterials] = React.useState(() => (saved?.materials || [blankMaterial()]).map(item => ({ ...item, unitPrice: formatNumberInput(item.unitPrice) })));
+  const [labor, setLabor] = React.useState(() => (saved?.labor || [blankLabor()]).map(item => ({ ...item, dailyRate: formatNumberInput(item.dailyRate) })));
+  const [equipment, setEquipment] = React.useState(() => (saved?.equipment || [blankEquipment()]).map(item => ({
+    ...item,
+    rate: formatNumberInput(item.rate),
+    fuel: formatNumberInput(item.fuel),
+    maintenance: formatNumberInput(item.maintenance),
+  })));
+  const [overhead, setOverhead] = React.useState(() => (saved?.overhead || [blankExpense()]).map(item => ({ ...item, amount: formatNumberInput(item.amount) })));
+  const [profit, setProfit] = React.useState(saved?.profit?.amount == null ? '' : formatNumberInput(String(saved.profit.amount)));
+  const [contingency, setContingency] = React.useState(saved?.contingency?.amount == null ? '' : formatNumberInput(String(saved.contingency.amount)));
+  const [taxes, setTaxes] = React.useState(saved?.taxes?.amount == null ? '' : formatNumberInput(String(saved.taxes.amount)));
   const [duration, setDuration] = React.useState(existingQuote?.duration_months ? String(existingQuote.duration_months) : '');
   const [proposedStartDate, setProposedStartDate] = React.useState(existingQuote?.proposed_start_date || '');
   const [declaration, setDeclaration] = React.useState(false);
@@ -55,13 +60,13 @@ export default function ContractorCostBreakdownModal({ project, existingQuote, i
   const add = <T,>(setter: React.Dispatch<React.SetStateAction<T[]>>, item: T) => setter(items => [...items, item]);
   const remove = <T,>(setter: React.Dispatch<React.SetStateAction<T[]>>, index: number) => setter(items => items.length === 1 ? items : items.filter((_, itemIndex) => itemIndex !== index));
   const validate = () => {
-    const required = (value: string) => value.trim() !== '' && Number.isFinite(Number(value)) && Number(value) >= 0;
+    const required = (value: string) => value.trim() !== '' && Number.isFinite(parseNumberInput(value)) && parseNumberInput(value) >= 0;
     if (!required(duration) || !Number.isInteger(Number(duration)) || Number(duration) <= 0) {
       return 'Enter the estimated construction duration as a whole number of months.';
     }
     if (!proposedStartDate) return 'Select a proposed start date.';
     if (!materials.every(item => item.name && required(item.quantity) && item.unit && required(item.unitPrice))) return 'Every material requires a name, quantity, unit, and non-negative unit price.';
-    if (!labor.every(item => item.position && required(item.workers) && Number(item.workers) > 0 && required(item.dailyRate) && required(item.days) && Number(item.days) > 0)) return 'Every labor position requires a position, workers, daily wage, and working days.';
+    if (!labor.every(item => item.position && required(item.workers) && parseNumberInput(item.workers) > 0 && required(item.dailyRate) && required(item.days) && parseNumberInput(item.days) > 0)) return 'Every labor position requires a position, workers, daily wage, and working days.';
     if (!equipment.every(item => item.name && required(item.quantity) && required(item.rate) && required(item.duration))) return 'Every machine requires a name, quantity, rate, and duration.';
     if (!overhead.every(item => item.name && item.description && required(item.amount))) return 'Every overhead expense needs an expense name, amount, and description.';
     if (!declaration) return 'Accept the contractor declaration before submitting.';
@@ -87,7 +92,22 @@ export default function ContractorCostBreakdownModal({ project, existingQuote, i
       if (authError) throw authError;
       if (!user) throw new Error('Sign in before submitting a project proposal.');
       const now = new Date().toISOString();
-      const detailed = { materials, labor, equipment, overhead, profit: { amount: money(profit) }, contingency: { amount: money(contingency) }, taxes: { amount: money(taxes) }, calculated_total: totalAmount, declaration_accepted_at: now };
+      const detailed = {
+        materials: materials.map(item => ({ ...item, unitPrice: String(money(item.unitPrice)) })),
+        labor: labor.map(item => ({ ...item, dailyRate: String(money(item.dailyRate)) })),
+        equipment: equipment.map(item => ({
+          ...item,
+          rate: String(money(item.rate)),
+          fuel: String(money(item.fuel)),
+          maintenance: String(money(item.maintenance)),
+        })),
+        overhead: overhead.map(item => ({ ...item, amount: String(money(item.amount)) })),
+        profit: { amount: money(profit) },
+        contingency: { amount: money(contingency) },
+        taxes: { amount: money(taxes) },
+        calculated_total: totalAmount,
+        declaration_accepted_at: now,
+      };
       const { data, error } = await supabase.from('quotes').upsert({
         project_id: project.id, contractor_id: user.id, materials_subtotal: materialTotal, labor_cost: laborTotal, equipment_cost: equipmentTotal, logistics_cost: 0,
         overhead_profit_cost: sum([overheadTotal, money(profit)]), other_charges: 0, taxes_cost: money(taxes), total_materials_quotation: materialTotal, delivery_charges: 0,
@@ -118,17 +138,18 @@ export default function ContractorCostBreakdownModal({ project, existingQuote, i
     onChange: (value: string) => void,
     numeric = false,
     type: 'text' | 'date' = 'text',
-    numericOptions: { min?: string; step?: string } = {},
+    numericOptions: { min?: string; step?: string; formatThousands?: boolean } = {},
   ) => (
     <label className="block text-xs font-semibold leading-5 text-slate-700">
       {label}
       <input
         required
-        type={numeric ? 'number' : type}
-        min={numeric ? numericOptions.min ?? '0' : undefined}
-        step={numeric ? numericOptions.step ?? '0.01' : undefined}
+        type={numeric && !numericOptions.formatThousands ? 'number' : type}
+        inputMode={numericOptions.formatThousands ? 'decimal' : undefined}
+        min={numeric && !numericOptions.formatThousands ? numericOptions.min ?? '0' : undefined}
+        step={numeric && !numericOptions.formatThousands ? numericOptions.step ?? '0.01' : undefined}
         value={value}
-        onChange={event => onChange(event.target.value)}
+        onChange={event => onChange(numericOptions.formatThousands ? formatNumberInput(event.target.value) : event.target.value)}
         className="mt-1 block min-h-10 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-normal text-slate-900 shadow-sm outline-none transition placeholder:text-slate-400 focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
       />
     </label>
@@ -142,7 +163,7 @@ export default function ContractorCostBreakdownModal({ project, existingQuote, i
               {input('Material name', item.name, value => update(setMaterials, index, { name: value }))}
               {input('Quantity', item.quantity, value => update(setMaterials, index, { quantity: value }), true)}
               {input('Unit', item.unit, value => update(setMaterials, index, { unit: value }))}
-              {input('Unit price', item.unitPrice, value => update(setMaterials, index, { unitPrice: value }), true)}
+              {input('Unit price', item.unitPrice, value => update(setMaterials, index, { unitPrice: value }), true, 'text', { formatThousands: true })}
             </div>
             <div className="mt-2 flex items-center justify-between text-xs">
               <b>Subtotal: {formatCurrency(money(item.quantity) * money(item.unitPrice))}</b>
@@ -160,7 +181,7 @@ export default function ContractorCostBreakdownModal({ project, existingQuote, i
             <div className="grid gap-3 sm:grid-cols-4">
               {input('Position', item.position, value => update(setLabor, index, { position: value }))}
               {input('Workers', item.workers, value => update(setLabor, index, { workers: value }), true)}
-              {input('Daily wage', item.dailyRate, value => update(setLabor, index, { dailyRate: value }), true)}
+              {input('Daily wage', item.dailyRate, value => update(setLabor, index, { dailyRate: value }), true, 'text', { formatThousands: true })}
               {input('Working days', item.days, value => update(setLabor, index, { days: value }), true)}
             </div>
             <div className="mt-2 text-xs"><b>Subtotal: {formatCurrency(money(item.workers) * money(item.dailyRate) * money(item.days))}</b></div>
@@ -176,11 +197,11 @@ export default function ContractorCostBreakdownModal({ project, existingQuote, i
             <div className="grid gap-3 sm:grid-cols-4">
               {input('Machine name', item.name, value => update(setEquipment, index, { name: value }))}
               {input('Quantity', item.quantity, value => update(setEquipment, index, { quantity: value }), true)}
-              {input('Rate / price', item.rate, value => update(setEquipment, index, { rate: value }), true)}
+              {input('Rate / price', item.rate, value => update(setEquipment, index, { rate: value }), true, 'text', { formatThousands: true })}
               {input('Duration', item.duration, value => update(setEquipment, index, { duration: value }), true)}
               {input('Arrangement', item.arrangement, value => update(setEquipment, index, { arrangement: value }))}
-              {input('Fuel / operating cost', item.fuel, value => update(setEquipment, index, { fuel: value }), true)}
-              {input('Maintenance / mobilization', item.maintenance, value => update(setEquipment, index, { maintenance: value }), true)}
+              {input('Fuel / operating cost', item.fuel, value => update(setEquipment, index, { fuel: value }), true, 'text', { formatThousands: true })}
+              {input('Maintenance / mobilization', item.maintenance, value => update(setEquipment, index, { maintenance: value }), true, 'text', { formatThousands: true })}
             </div>
             <div className="mt-2 text-xs"><b>Subtotal: {formatCurrency(money(item.quantity) * money(item.rate) * money(item.duration) + money(item.fuel) + money(item.maintenance))}</b></div>
           </div>
@@ -193,15 +214,15 @@ export default function ContractorCostBreakdownModal({ project, existingQuote, i
         {overhead.map((item, index) => (
           <div key={index} className="grid gap-3 rounded-xl border border-slate-200 bg-white p-3 sm:grid-cols-3">
             {input('Expense', item.name, value => update(setOverhead, index, { name: value }))}
-            {input('Amount', item.amount, value => update(setOverhead, index, { amount: value }), true)}
+            {input('Amount', item.amount, value => update(setOverhead, index, { amount: value }), true, 'text', { formatThousands: true })}
             {input('Description', item.description, value => update(setOverhead, index, { description: value }))}
           </div>
         ))}
         <button type="button" onClick={() => add(setOverhead, blankExpense())} className="inline-flex items-center gap-1.5 rounded-lg border border-blue-200 bg-blue-50 px-3 py-2 text-xs font-bold text-blue-700"><Plus className="h-3.5 w-3.5" /> Add overhead expense</button>
         <div className="grid gap-3 rounded-xl border border-slate-200 bg-white p-3 sm:grid-cols-3">
           {input("Contractor's profit", profit, setProfit, true)}
-          {input('Contingency allowance', contingency, setContingency, true)}
-          {input('Taxes and charges', taxes, setTaxes, true)}
+          {input('Contingency allowance', contingency, setContingency, true, 'text', { formatThousands: true })}
+          {input('Taxes and charges', taxes, setTaxes, true, 'text', { formatThousands: true })}
         </div>
         <label className="flex items-start gap-2 rounded-xl border border-amber-200 bg-amber-50 p-3 text-[11px] text-amber-900">
           <input type="checkbox" checked={declaration} onChange={event => setDeclaration(event.target.checked)} className="mt-0.5" />

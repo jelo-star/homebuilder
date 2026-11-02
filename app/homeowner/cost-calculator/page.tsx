@@ -18,7 +18,7 @@ import {
   checkBudgetStatus,
   ComprehensiveEstimateResult
 } from '@/lib/utils/estimator';
-import { formatCurrency } from '@/lib/utils/formatters';
+import { formatCurrency, formatNumberInput, parseNumberInput } from '@/lib/utils/formatters';
 import { FinishLevel, WorkType, HouseType } from '@/types/database';
 import { createClient } from '@/lib/supabase/client';
 import { calculatePreliminaryEstimateFromSupabase } from '@/lib/utils/estimator';
@@ -40,7 +40,7 @@ export default function CostCalculatorPage() {
 
   const [province, setProvince] = React.useState('Metro Manila');
   const [city, setCity] = React.useState('');
-  const [userBudget, setUserBudget] = React.useState<number | ''>('');
+  const [userBudget, setUserBudget] = React.useState('');
   const [paymentTranches] = React.useState<number>(3);
 
   // Expandable Category Breakdown Accordion
@@ -131,7 +131,7 @@ export default function CostCalculatorPage() {
 
   const budgetAnalysis = React.useMemo(() => {
     if (!estimateResult) return null;
-    return checkBudgetStatus(Number(userBudget) || null, estimateResult.costLow, estimateResult.costHigh);
+    return checkBudgetStatus(parseNumberInput(userBudget) || null, estimateResult.costLow, estimateResult.costHigh);
   }, [userBudget, estimateResult]);
 
   const toggleCategory = (id: string) => {
@@ -210,7 +210,7 @@ export default function CostCalculatorPage() {
         floors: Number(floors),
         province,
         city: city.trim(),
-        budget: userBudget ? Number(userBudget) : null,
+        budget: parseNumberInput(userBudget) || null,
         desired_start: 'in_2_months' as const,
         payment_tranches: paymentTranches,
         est_low: estimateResult.costLow,
@@ -545,9 +545,10 @@ export default function CostCalculatorPage() {
                 Your Planned Budget in PHP (Optional)
               </label>
               <input
-                type="number"
+                type="text"
+                inputMode="decimal"
                 value={userBudget}
-                onChange={(e) => setUserBudget(e.target.value ? Number(e.target.value) : '')}
+                onChange={(e) => setUserBudget(formatNumberInput(e.target.value))}
                 placeholder="e.g. 3500000"
                 className="w-full text-xs border border-slate-300 rounded-xl p-2.5 bg-white text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500"
               />

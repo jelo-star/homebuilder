@@ -36,7 +36,7 @@ import {
   ProjectPlanComment,
   Milestone
 } from '@/types/database';
-import { formatCurrency, formatDate, capitalize } from '@/lib/utils/formatters';
+import { formatCurrency, formatDate, formatNumberInput, parseNumberInput, capitalize } from '@/lib/utils/formatters';
 
 export interface PlanMilestoneRow {
   id: string;
@@ -303,16 +303,19 @@ function ContractorProjectPlanContent() {
     setRows(prev => [...prev, newRow]);
   };
 
-  const handleUpdateRow = (id: string, field: keyof PlanMilestoneRow, value: any) => {
+  const handleUpdateRow = (id: string, field: keyof PlanMilestoneRow, value: string | number) => {
     if (isPlanApproved) return;
     setRows(prev =>
       prev.map(r => {
         if (r.id !== id) return r;
         if (field === 'amount') {
-          const num = Math.max(0, parseFloat(value) || 0);
+          const num = Math.max(0, parseNumberInput(String(value)));
           return { ...r, amount: num };
         }
-        return { ...r, [field]: value };
+        if (field === 'name') return { ...r, name: String(value) };
+        if (field === 'description') return { ...r, description: String(value) };
+        if (field === 'start_date') return { ...r, start_date: String(value) };
+        return { ...r, end_date: String(value) };
       })
     );
   };
@@ -737,11 +740,10 @@ function ContractorProjectPlanContent() {
                           <div className="relative">
                             <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400 font-bold">₱</span>
                             <input
-                              type="number"
-                              min="0"
-                              step="1000"
-                              value={row.amount || ''}
-                              onChange={e => handleUpdateRow(row.id, 'amount', e.target.value)}
+                              type="text"
+                              inputMode="decimal"
+                              value={row.amount ? formatNumberInput(String(row.amount)) : ''}
+                              onChange={e => handleUpdateRow(row.id, 'amount', formatNumberInput(e.target.value))}
                               disabled={isPlanApproved}
                               className="w-full pl-6 pr-2 py-1.5 rounded-lg border border-slate-200 text-xs font-bold text-slate-900 focus:border-[#136F48] focus:ring-1 focus:ring-[#136F48] outline-hidden bg-white font-mono"
                             />

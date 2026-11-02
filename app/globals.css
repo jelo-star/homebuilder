@@ -61,4 +61,8 @@ body {
   .popular-services-track {
     animation: none;
   }
+
+  .popular-services-marquee {
+    overflow-x: auto;
+  }
 }

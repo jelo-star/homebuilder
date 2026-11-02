@@ -5,7 +5,7 @@ import AppLayout from '@/components/ui/AppLayout';
 import { createClient } from '@/lib/supabase/client';
 import { ContractorProfile, HouseType, Profile, UserRole } from '@/types/database';
 import { KeyRound, Pencil, RefreshCw, ShieldCheck, Trash2, UserPlus, Users, X } from 'lucide-react';
-import { formatDate } from '@/lib/utils/formatters';
+import { formatDate, formatNumberInput, parseNumberInput } from '@/lib/utils/formatters';
 import { useToast } from '@/components/ui/ToastProvider';
 
 interface AdminManagedProfile extends Profile {
@@ -584,20 +584,26 @@ export default function AdminUsersPage() {
                     <label className="block space-y-1.5 font-semibold text-slate-700">
                       Minimum project budget
                       <input
-                        type="number"
-                        min={0}
-                        value={editContractor.min_project_budget || ''}
-                        onChange={event => setEditContractor({ ...editContractor, min_project_budget: event.target.value ? Number(event.target.value) : undefined })}
+                        type="text"
+                        inputMode="decimal"
+                        value={formatNumberInput(String(editContractor.min_project_budget || ''))}
+                        onChange={event => setEditContractor({
+                          ...editContractor,
+                          min_project_budget: event.target.value ? parseNumberInput(formatNumberInput(event.target.value)) : undefined,
+                        })}
                         className="w-full rounded-xl border border-slate-200 px-3 py-2.5 font-normal text-slate-900"
                       />
                     </label>
                     <label className="block space-y-1.5 font-semibold text-slate-700">
                       Maximum project budget
                       <input
-                        type="number"
-                        min={0}
-                        value={editContractor.max_project_budget || ''}
-                        onChange={event => setEditContractor({ ...editContractor, max_project_budget: event.target.value ? Number(event.target.value) : undefined })}
+                        type="text"
+                        inputMode="decimal"
+                        value={formatNumberInput(String(editContractor.max_project_budget || ''))}
+                        onChange={event => setEditContractor({
+                          ...editContractor,
+                          max_project_budget: event.target.value ? parseNumberInput(formatNumberInput(event.target.value)) : undefined,
+                        })}
                         className="w-full rounded-xl border border-slate-200 px-3 py-2.5 font-normal text-slate-900"
                       />
                     </label>

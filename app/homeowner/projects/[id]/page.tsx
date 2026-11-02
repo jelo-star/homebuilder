@@ -45,7 +45,7 @@ import {
 } from 'lucide-react';
 import { createClient } from '@/lib/supabase/client';
 import { Project, Quote, Milestone, ContractorProfile, ConfiguredPaymentMethod, MilestoneProof, Dispute, ProjectPlan, ProjectPlanComment } from '@/types/database';
-import { formatCurrency, formatDate, capitalize, cleanMilestoneTitle, removeUnderscore } from '@/lib/utils/formatters';
+import { formatCurrency, formatDate, formatNumberInput, parseNumberInput, capitalize, cleanMilestoneTitle, removeUnderscore } from '@/lib/utils/formatters';
 import { calculateEstimate } from '@/lib/utils/estimator';
 import { useToast } from '@/components/ui/ToastProvider';
 import QuotationComparisonModal from '@/components/homeowner/QuotationComparisonModal';
@@ -1137,7 +1137,7 @@ function ProjectDetailsContent() {
       showToast('No active payment methods are available.', 'error', 'Payment Method Unavailable');
       return;
     }
-    const enteredAmount = Number(proofForm.customPaymentAmount);
+    const enteredAmount = parseNumberInput(proofForm.customPaymentAmount);
     const centavos = Math.round(enteredAmount * 100);
     if (!Number.isFinite(enteredAmount) || enteredAmount <= 0 || !Number.isSafeInteger(centavos)) {
       showToast('Please enter a valid payment amount.', 'error', 'Amount Required');
@@ -2811,16 +2811,12 @@ function ProjectDetailsContent() {
                   <div className="relative">
                     <span className="absolute left-3.5 top-1/2 -translate-y-1/2 text-sm font-bold text-slate-400 font-mono">₱</span>
                     <input
-                      type="number"
-                      min={selectedPaymentMethod?.min_amount ?? 0.01}
-                      max={selectedPaymentMethod?.max_amount != null
-                        ? Math.min(availablePaymentBalance, selectedPaymentMethod.max_amount)
-                        : availablePaymentBalance}
-                      step="0.01"
+                      type="text"
+                      inputMode="decimal"
                       required
                       placeholder="Enter amount to pay"
-                      value={proofForm.customPaymentAmount}
-                      onChange={(e) => setProofForm({ ...proofForm, customPaymentAmount: e.target.value })}
+                      value={formatNumberInput(proofForm.customPaymentAmount)}
+                      onChange={(e) => setProofForm({ ...proofForm, customPaymentAmount: formatNumberInput(e.target.value) })}
                       className="w-full pl-8 pr-4 py-2.5 bg-white border border-slate-300 rounded-xl text-sm font-bold font-mono text-slate-900 focus:ring-2 focus:ring-blue-500 focus:outline-none"
                     />
                   </div>

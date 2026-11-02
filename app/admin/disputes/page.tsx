@@ -28,7 +28,7 @@ import {
 } from 'lucide-react';
 import { createClient } from '@/lib/supabase/client';
 import { Dispute, DisputeStatus, Milestone } from '@/types/database';
-import { formatDate, formatCurrency, capitalize } from '@/lib/utils/formatters';
+import { formatDate, formatCurrency, formatNumberInput, parseNumberInput, capitalize } from '@/lib/utils/formatters';
 
 interface ProjectDisputeSummary {
   id: string;
@@ -337,7 +337,7 @@ export default function AdminDisputesPage() {
       setError('The selected project does not have a homeowner profile.');
       return;
     }
-    const parsedAmount = parseFloat(logForm.milestoneAmount) || 0;
+    const parsedAmount = parseNumberInput(logForm.milestoneAmount);
     if (parsedAmount <= 0) {
       setError('Enter a contested milestone amount greater than zero.');
       return;
@@ -1319,9 +1319,10 @@ export default function AdminDisputesPage() {
                   <div className="relative">
                     <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 font-mono">₱</span>
                     <input
-                      type="number"
-                      value={logForm.milestoneAmount}
-                      onChange={(e) => setLogForm(prev => ({ ...prev, milestoneAmount: e.target.value }))}
+                      type="text"
+                      inputMode="decimal"
+                      value={formatNumberInput(logForm.milestoneAmount)}
+                      onChange={(e) => setLogForm(prev => ({ ...prev, milestoneAmount: formatNumberInput(e.target.value) }))}
                       className="w-full pl-7 pr-3 py-2.5 rounded-xl border border-slate-200 text-xs font-mono font-bold bg-slate-50 focus:bg-white focus:outline-none focus:ring-2 focus:ring-blue-500"
                       required
                     />

@@ -363,7 +363,22 @@ export default function HomePage() {
             ) : contractors.length === 0 ? (
               <p className="mt-8 text-center text-sm text-slate-600">No approved contractor profiles are available yet.</p>
             ) : (
-              <div className="mx-auto mt-8 grid w-full max-w-4xl gap-4 md:grid-cols-2">
+              <div
+                className="popular-services-marquee relative left-1/2 mt-8 w-screen -translate-x-1/2 overflow-hidden"
+                role="region"
+                aria-label="Featured contractors"
+                aria-roledescription="carousel"
+              >
+                <div
+                  className="popular-services-track flex w-max"
+                  style={{ animationDuration: `${Math.max(12, contractors.length * 4)}s` }}
+                >
+                  {[false, true].map((isDuplicate) => (
+                    <div
+                      key={isDuplicate ? 'duplicate-contractors' : 'featured-contractors'}
+                      aria-hidden={isDuplicate || undefined}
+                      className="flex w-max shrink-0 gap-4 pr-4"
+                    >
                 {contractors.map((contractor) => {
                   const name = contractor.business_name.trim() || contractor.trade_name?.trim() || 'Contractor';
                   const contractorServices = (contractor.work_types ?? [])
@@ -376,7 +391,7 @@ export default function HomePage() {
                     .join(', ');
                   const location = serviceLocation || businessLocation || 'Location not listed';
                   return (
-                    <article key={contractor.profile_id} className="group grid h-full grid-cols-1 content-start gap-x-5 rounded-xl border border-slate-200 bg-white p-4 shadow-[0_6px_18px_rgba(15,23,42,0.035)] transition duration-200 hover:border-[#b8d7c6] hover:shadow-[0_12px_26px_rgba(15,23,42,0.07)] md:grid-cols-2">
+                    <article key={contractor.profile_id} className="popular-service-card group grid h-full min-w-[280px] shrink-0 grid-cols-1 content-start gap-x-5 rounded-xl border border-slate-200 bg-white p-4 shadow-[0_6px_18px_rgba(15,23,42,0.035)] transition duration-200 hover:border-[#b8d7c6] hover:shadow-[0_12px_26px_rgba(15,23,42,0.07)] md:grid-cols-2">
                       <div className="flex items-start justify-between gap-3 border-b border-slate-100 pb-3 md:col-span-2">
                         <div className="flex min-w-0 items-center gap-3">
                           <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg border border-[#d6e8de] bg-[#f0f7f3] text-base font-bold text-[#136F48]">
@@ -439,7 +454,7 @@ export default function HomePage() {
                             {contractor.portfolio_count} {contractor.portfolio_count === 1 ? 'project' : 'projects'}
                           </p>
                         </div>
-                        <Link href={`/contractors/${contractor.profile_id}`} className="inline-flex min-h-10 items-center justify-center gap-2 rounded-lg border border-[#136F48] bg-[#136F48] px-4 py-2 text-sm font-semibold text-white transition hover:border-[#0f5738] hover:bg-[#0f5738] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#136F48]">
+                        <Link href={`/contractors/${contractor.profile_id}`} tabIndex={isDuplicate ? -1 : undefined} className="inline-flex min-h-10 items-center justify-center gap-2 rounded-lg border border-[#136F48] bg-[#136F48] px-4 py-2 text-sm font-semibold text-white transition hover:border-[#0f5738] hover:bg-[#0f5738] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#136F48]">
                           View company
                           <ArrowRight className="h-4 w-4" />
                         </Link>
@@ -447,6 +462,9 @@ export default function HomePage() {
                     </article>
                   );
                 })}
+                    </div>
+                  ))}
+                </div>
               </div>
             )}
           </div>

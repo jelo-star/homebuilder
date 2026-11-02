@@ -27,7 +27,7 @@ import {
 } from 'lucide-react';
 import { createClient } from '@/lib/supabase/client';
 import { HouseType, WorkType, FinishLevel, StartWindow } from '@/types/database';
-import { formatCurrency } from '@/lib/utils/formatters';
+import { formatCurrency, formatNumberInput, parseNumberInput } from '@/lib/utils/formatters';
 import { calculateEstimate } from '@/lib/utils/estimator';
 import { PHILIPPINE_REGIONS, ALL_PHILIPPINE_PROVINCES } from '@/lib/utils/philippines';
 
@@ -307,7 +307,7 @@ export default function CreateProjectPage() {
         bathrooms: Number(bathrooms) || 0,
         province,
         city: city.trim(),
-        budget: Number(budget) || null,
+        budget: parseNumberInput(budget) || null,
         desired_start: desiredStart,
         payment_tranches: paymentTranches,
         plan_file_path: planFilePath,
@@ -704,11 +704,10 @@ export default function CreateProjectPage() {
                         <span className="pointer-events-none absolute inset-y-0 left-3 flex items-center text-xs font-semibold text-slate-400">₱</span>
                         <input
                           id="homeowner-target-budget"
-                          type="number"
-                          min="0"
-                          step="1000"
+                          type="text"
+                          inputMode="decimal"
                           value={budget}
-                          onChange={(e) => setBudget(e.target.value)}
+                          onChange={(e) => setBudget(formatNumberInput(e.target.value))}
                           placeholder="e.g. 4,500,000"
                           className="w-full rounded-xl border border-slate-200 bg-white py-2.5 pl-8 pr-3 text-sm font-bold text-slate-900 focus:border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-500/20"
                         />
@@ -740,17 +739,17 @@ export default function CreateProjectPage() {
                             <div className="mt-1 text-sm font-bold text-slate-900">{formatCurrency(liveEstimate.high)}</div>
                           </div>
                         </div>
-                        {Number(budget) > 0 && (
+                        {parseNumberInput(budget) > 0 && (
                           <div className={`rounded-xl border p-3 text-xs leading-relaxed ${
-                            Number(budget) >= liveEstimate.high
+                            parseNumberInput(budget) >= liveEstimate.high
                               ? 'border-emerald-200 bg-emerald-50 text-emerald-800'
-                              : Number(budget) >= liveEstimate.low
+                              : parseNumberInput(budget) >= liveEstimate.low
                                 ? 'border-amber-200 bg-amber-50 text-amber-800'
                                 : 'border-rose-200 bg-rose-50 text-rose-800'
                           }`}>
-                            {Number(budget) >= liveEstimate.high
+                            {parseNumberInput(budget) >= liveEstimate.high
                               ? 'Your target budget covers the estimated cost range.'
-                              : Number(budget) >= liveEstimate.low
+                              : parseNumberInput(budget) >= liveEstimate.low
                                 ? 'Your target budget is within the estimated range, but below the midpoint.'
                                 : 'Your target budget is below the estimated cost range.'}
                           </div>

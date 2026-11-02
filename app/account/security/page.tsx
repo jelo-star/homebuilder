@@ -17,8 +17,6 @@ export default function AccountSecurityPage() {
   const router = useRouter();
   const [loading, setLoading] = React.useState(true);
   const [role, setRole] = React.useState<UserRole | null>(null);
-  const [email, setEmail] = React.useState('');
-  const [currentPassword, setCurrentPassword] = React.useState('');
   const [newPassword, setNewPassword] = React.useState('');
   const [confirmPassword, setConfirmPassword] = React.useState('');
   const [saving, setSaving] = React.useState(false);
@@ -55,7 +53,6 @@ export default function AccountSecurityPage() {
 
         if (active) {
           setRole(profile.role as UserRole);
-          setEmail(user.email);
         }
       } catch (loadError) {
         if (active) setError(loadError instanceof Error ? loadError.message : 'Account details could not be loaded.');
@@ -81,28 +78,12 @@ export default function AccountSecurityPage() {
       setError('New password and confirmation do not match.');
       return;
     }
-    if (newPassword === currentPassword) {
-      setError('Choose a new password that differs from your current password.');
-      return;
-    }
-    if (!email) {
-      setError('Your account email could not be verified. Reload and try again.');
-      return;
-    }
-
     setSaving(true);
     try {
       const supabase = createClient();
-      const { error: reauthError } = await supabase.auth.signInWithPassword({
-        email,
-        password: currentPassword,
-      });
-      if (reauthError) throw new Error(`Current password could not be verified: ${reauthError.message}`);
-
       const { error: updateError } = await supabase.auth.updateUser({ password: newPassword });
       if (updateError) throw updateError;
 
-      setCurrentPassword('');
       setNewPassword('');
       setConfirmPassword('');
       setSuccess('Your password has been changed.');
@@ -151,22 +132,11 @@ export default function AccountSecurityPage() {
             </div>
             <div>
               <h2 className="text-sm font-bold text-slate-900">Update password</h2>
-              <p className="text-xs text-slate-500">Confirm your current password before choosing a new one.</p>
+              <p className="text-xs text-slate-500">Choose a new password for your account.</p>
             </div>
           </div>
 
           <form onSubmit={handleChangePassword} className="space-y-4">
-            <label className="block space-y-1.5 text-xs font-semibold text-slate-700">
-              Current password
-              <input
-                type="password"
-                required
-                autoComplete="current-password"
-                value={currentPassword}
-                onChange={event => setCurrentPassword(event.target.value)}
-                className="w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm font-normal text-slate-900 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/20"
-              />
-            </label>
             <label className="block space-y-1.5 text-xs font-semibold text-slate-700">
               New password
               <input

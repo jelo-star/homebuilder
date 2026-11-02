@@ -20,6 +20,7 @@ import {
   Clock 
 } from 'lucide-react';
 import { ContractorPayoutAccount, PaymentTransactionRecord } from '@/types/database';
+import { formatNumberInput, parseNumberInput } from '@/lib/utils/formatters';
 
 interface ProjectSafekeepingSummary {
   id: string;
@@ -341,8 +342,8 @@ export default function AdminTransactionsPage() {
   // Execute Payout Transfer to Contractor with Proof
   const handleExecuteContractorPayout = async () => {
     if (!transferringTx) return;
-    const numericAmount = parseFloat(transferAmount);
-    if (isNaN(numericAmount) || numericAmount <= 0) {
+    const numericAmount = parseNumberInput(transferAmount);
+    if (numericAmount <= 0) {
       setActionNotice({ text: 'Please enter a valid transfer amount.', type: 'error' });
       return;
     }
@@ -990,9 +991,10 @@ export default function AdminTransactionsPage() {
                 <div className="relative">
                   <span className="absolute left-3 top-1/2 -translate-y-1/2 font-mono font-bold text-slate-500">₱</span>
                   <input
-                    type="number"
-                    value={transferAmount}
-                    onChange={(e) => setTransferAmount(e.target.value)}
+                    type="text"
+                    inputMode="decimal"
+                    value={formatNumberInput(transferAmount)}
+                    onChange={(e) => setTransferAmount(formatNumberInput(e.target.value))}
                     className="w-full pl-8 pr-3 py-2 rounded-xl border border-slate-200 text-sm font-bold font-mono focus:ring-2 focus:ring-blue-500 focus:outline-none"
                     placeholder="0.00"
                   />

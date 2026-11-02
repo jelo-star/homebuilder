@@ -21,7 +21,7 @@ import {
 } from 'lucide-react';
 import { createClient } from '@/lib/supabase/client';
 import { ContractorProfile, HouseType, FinishLevel, WorkType } from '@/types/database';
-import { formatCurrency } from '@/lib/utils/formatters';
+import { formatCurrency, formatNumberInput, parseNumberInput } from '@/lib/utils/formatters';
 
 export default function ContractorProfilePage() {
   const [loading, setLoading] = React.useState(true);
@@ -69,8 +69,8 @@ export default function ContractorProfilePage() {
   const [specialties, setSpecialties] = React.useState<HouseType[]>([]);
   const [finishLevels, setFinishLevels] = React.useState<FinishLevel[]>([]);
   const [workTypes, setWorkTypes] = React.useState<WorkType[]>([]);
-  const [minBudget, setMinBudget] = React.useState<number>(0);
-  const [maxBudget, setMaxBudget] = React.useState<number>(0);
+  const [minBudget, setMinBudget] = React.useState('0');
+  const [maxBudget, setMaxBudget] = React.useState('0');
 
   // Verification & rating metrics (read-only for security)
   const [contractor, setContractor] = React.useState<ContractorProfile | null>(null);
@@ -123,8 +123,8 @@ export default function ContractorProfilePage() {
         setSpecialties(c.specialties || []);
         setFinishLevels(c.finish_levels || []);
         setWorkTypes(c.work_types || []);
-        setMinBudget(c.min_project_budget || 0);
-        setMaxBudget(c.max_project_budget || 0);
+        setMinBudget(formatNumberInput(String(c.min_project_budget || 0)));
+        setMaxBudget(formatNumberInput(String(c.max_project_budget || 0)));
       }
     }
 
@@ -141,12 +141,17 @@ export default function ContractorProfilePage() {
   const handleAddCity = (e: React.KeyboardEvent) => {
     if (e.key === 'Enter' && cityInput.trim()) {
       e.preventDefault();
-      const trimmed = cityInput.trim();
-      if (!serviceCities.includes(trimmed)) {
-        setServiceCities([...serviceCities, trimmed]);
-      }
-      setCityInput('');
+      addServiceCity();
     }
+  };
+
+  const addServiceCity = () => {
+    const trimmed = cityInput.trim();
+    if (!trimmed) return;
+    if (!serviceCities.some(city => city.toLocaleLowerCase() === trimmed.toLocaleLowerCase())) {
+      setServiceCities(current => [...current, trimmed]);
+    }
+    setCityInput('');
   };
 
   const handleRemoveCity = (cityToRemove: string) => {
@@ -210,8 +215,8 @@ export default function ContractorProfilePage() {
         specialties,
         finish_levels: finishLevels,
         work_types: workTypes,
-        min_project_budget: Number(minBudget) || null,
-        max_project_budget: Number(maxBudget) || null,
+        min_project_budget: parseNumberInput(minBudget) || null,
+        max_project_budget: parseNumberInput(maxBudget) || null,
         updated_at: new Date().toISOString(),
       };
 
@@ -692,14 +697,24 @@ export default function ContractorProfilePage() {
                   </span>
                 ))}
               </div>
-              <input
-                type="text"
-                value={cityInput}
-                onChange={(e) => setCityInput(e.target.value)}
-                onKeyDown={handleAddCity}
-                placeholder="Type a service city and press Enter to add"
-                className="w-full text-xs p-2.5 border border-slate-300 rounded-xl text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500"
-              />
+              <div className="flex items-stretch gap-2">
+                <input
+                  type="text"
+                  value={cityInput}
+                  onChange={(e) => setCityInput(e.target.value)}
+                  onKeyDown={handleAddCity}
+                  placeholder="Type a service city or municipality"
+                  className="min-w-0 flex-1 text-xs p-2.5 border border-slate-300 rounded-xl text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                />
+                <button
+                  type="button"
+                  onClick={addServiceCity}
+                  disabled={!cityInput.trim()}
+                  className="min-h-11 shrink-0 rounded-xl bg-blue-600 px-4 text-xs font-bold text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  Add
+                </button>
+              </div>
             </div>
 
             {/* Specialties & Finish Levels */}
@@ -795,9 +810,10 @@ export default function ContractorProfilePage() {
               <div>
                 <label className="block text-xs font-bold text-slate-900 mb-1">Min. Project Budget (₱)</label>
                 <input
-                  type="number"
+                  type="text"
+                  inputMode="decimal"
                   value={minBudget}
-                  onChange={(e) => setMinBudget(Number(e.target.value))}
+                  onChange={(e) => setMinBudget(formatNumberInput(e.target.value))}
                   className="w-full text-xs p-2.5 border border-slate-300 rounded-xl"
                 />
               </div>
@@ -805,9 +821,10 @@ export default function ContractorProfilePage() {
               <div>
                 <label className="block text-xs font-bold text-slate-900 mb-1">Max. Project Budget (₱)</label>
                 <input
-                  type="number"
+                  type="text"
+                  inputMode="decimal"
                   value={maxBudget}
-                  onChange={(e) => setMaxBudget(Number(e.target.value))}
+                  onChange={(e) => setMaxBudget(formatNumberInput(e.target.value))}
                   className="w-full text-xs p-2.5 border border-slate-300 rounded-xl"
                 />
               </div>

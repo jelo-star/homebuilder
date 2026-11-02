@@ -29,7 +29,6 @@ export default function HomeownerProfilePage() {
   const [address, setAddress] = React.useState('');
   const [errorMsg, setErrorMsg] = React.useState('');
   const [successMsg, setSuccessMsg] = React.useState('');
-  const [currentPassword, setCurrentPassword] = React.useState('');
   const [newPassword, setNewPassword] = React.useState('');
   const [confirmPassword, setConfirmPassword] = React.useState('');
   const [passwordSaving, setPasswordSaving] = React.useState(false);
@@ -137,28 +136,12 @@ export default function HomeownerProfilePage() {
       setPasswordError('New password and confirmation do not match.');
       return;
     }
-    if (newPassword === currentPassword) {
-      setPasswordError('Choose a new password that differs from your current password.');
-      return;
-    }
-    if (!email) {
-      setPasswordError('Your account email could not be verified. Reload and try again.');
-      return;
-    }
-
     setPasswordSaving(true);
     try {
       const supabase = createClient();
-      const { error: reauthError } = await supabase.auth.signInWithPassword({
-        email,
-        password: currentPassword,
-      });
-      if (reauthError) throw new Error(`Current password could not be verified: ${reauthError.message}`);
-
       const { error: updateError } = await supabase.auth.updateUser({ password: newPassword });
       if (updateError) throw updateError;
 
-      setCurrentPassword('');
       setNewPassword('');
       setConfirmPassword('');
       setPasswordSuccess('Your password has been changed.');
@@ -376,17 +359,6 @@ export default function HomeownerProfilePage() {
           )}
 
           <form onSubmit={handleChangePassword} className="space-y-4">
-            <label className="block space-y-1.5 text-xs font-semibold text-slate-700">
-              Current password
-              <input
-                type="password"
-                required
-                autoComplete="current-password"
-                value={currentPassword}
-                onChange={event => setCurrentPassword(event.target.value)}
-                className="w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm font-normal text-slate-900 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/20"
-              />
-            </label>
             <div className="grid gap-4 sm:grid-cols-2">
               <label className="block space-y-1.5 text-xs font-semibold text-slate-700">
                 New password

@@ -8,6 +8,21 @@ export function formatCurrency(amount: number | null | undefined): string {
   }).format(amount);
 }
 
+export function formatNumberInput(value: string): string {
+  const cleaned = value.replace(/,/g, '').replace(/[^\d.]/g, '');
+  const decimalIndex = cleaned.indexOf('.');
+  const integer = decimalIndex === -1 ? cleaned : cleaned.slice(0, decimalIndex);
+  const decimals = decimalIndex === -1 ? '' : cleaned.slice(decimalIndex + 1).replace(/\./g, '');
+  const groupedInteger = integer.replace(/\B(?=(\d{3})+(?!\d))/g, ',');
+
+  return decimalIndex === -1 ? groupedInteger : `${groupedInteger}.${decimals}`;
+}
+
+export function parseNumberInput(value: string): number {
+  const parsed = Number(value.replace(/,/g, ''));
+  return Number.isFinite(parsed) ? parsed : 0;
+}
+
 export function formatDate(dateString: string | null | undefined): string {
   if (!dateString) return '—';
   try {
@@ -53,4 +68,3 @@ export function cleanMilestoneTitle(name: string | null | undefined): string {
     .replace(/\s*\(\s*\d+%\s*(of\s*contract)?\s*\)/i, '')
     .trim();
 }
-

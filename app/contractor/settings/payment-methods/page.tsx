@@ -12,7 +12,8 @@ import {
   Clock, 
   Plus, 
   Smartphone,
-  Landmark
+  Landmark,
+  Trash2
 } from 'lucide-react';
 import { ContractorPayoutAccount } from '@/types/database';
 
@@ -32,10 +33,10 @@ function getPayoutAccountErrorMessage(error: unknown): string {
     code === 'PGRST202' ||
     (message.includes('register_contractor_payout_account') && /schema cache|function/i.test(message))
   ) {
-    return 'Payout registration is not installed in Supabase yet. Apply migration 90, then refresh and try again.';
+    return 'Payout registration is not installed in Supabase yet. Apply supabase/migrations/104_repair_contractor_payout_registration.sql, then refresh and try again.';
   }
   if (code === '42501' || /row-level security|permission denied/i.test(message)) {
-    return 'Supabase denied payout registration. Confirm migration 90 has been applied and that you are signed in as a contractor.';
+    return 'Supabase denied payout registration. Confirm migration 104 has been applied and that you are signed in as a contractor.';
   }
 
   return [message, details, hint].filter(Boolean).join(' — ');
@@ -45,6 +46,7 @@ export default function ContractorPaymentMethodsPage() {
   const [payoutAccounts, setPayoutAccounts] = useState<ContractorPayoutAccount[]>([]);
   const [loading, setLoading] = useState(true);
   const [contractorId, setContractorId] = useState<string | null>(null);
+  const [deletingAccountId, setDeletingAccountId] = useState<string | null>(null);
   
   // Modal / Form state
   const [showAddModal, setShowAddModal] = useState(false);
@@ -151,6 +153,37 @@ export default function ContractorPaymentMethodsPage() {
       setMessage({ text: getPayoutAccountErrorMessage(err), type: 'error' });
     } finally {
       setIsSubmitting(false);
+    }
+  };
+
+  const handleDeleteAccount = async (account: ContractorPayoutAccount) => {
+    if (!contractorId || !window.confirm(`Delete the payout account ending ${account.account_number_mask.slice(-4)}?`)) return;
+
+    setDeletingAccountId(account.id);
+    setMessage(null);
+    try {
+      const supabase = createClient();
+      const { error } = await supabase
+        .from('contractor_payout_accounts')
+        .delete()
+        .eq('id', account.id)
+        .eq('contractor_id', contractorId);
+      if (error) {
+        if (error.code === '23503') {
+          throw new Error('This payout account is linked to payment history and cannot be deleted.');
+        }
+        throw error;
+      }
+
+      setPayoutAccounts(current => current.filter(item => item.id !== account.id));
+      setMessage({ text: 'Payout account deleted.', type: 'success' });
+    } catch (error) {
+      setMessage({
+        text: error instanceof Error ? error.message : 'Could not delete the payout account.',
+        type: 'error',
+      });
+    } finally {
+      setDeletingAccountId(null);
     }
   };
 
@@ -332,6 +365,16 @@ export default function ContractorPaymentMethodsPage() {
                           </span>
                         </div>
                       )}
+                      <button
+                        type="button"
+                        onClick={() => void handleDeleteAccount(account)}
+                        disabled={deletingAccountId === account.id}
+                        aria-label={`Delete ${account.bank_name || 'payout'} account ending ${account.account_number_mask.slice(-4)}`}
+                        title="Delete payout account"
+                        className="rounded-lg border border-red-200 p-2 text-red-600 hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-50"
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </button>
                     </div>
                   </div>
                 );

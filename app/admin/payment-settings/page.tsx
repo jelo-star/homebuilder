@@ -18,7 +18,8 @@ import {
   Search,
   FileText,
   ChevronDown,
-  ChevronUp
+  ChevronUp,
+  Trash2
 } from 'lucide-react';
 import { ConfiguredPaymentMethod } from '@/types/database';
 
@@ -102,6 +103,32 @@ export default function AdminPaymentSettingsPage() {
       });
     } catch (err: unknown) {
       const message = getErrorMessage(err, 'Unable to update payment channel.');
+      setError(message);
+      setToastMessage({ text: message, type: 'error' });
+    }
+  };
+
+  const handleDeleteMethod = async (method: ConfiguredPaymentMethod) => {
+    if (!window.confirm(`Delete "${method.display_name}"? Payment records that use this channel will be preserved and may prevent deletion.`)) return;
+
+    try {
+      const supabase = createClient();
+      const { error: deleteError } = await supabase
+        .from('payment_methods')
+        .delete()
+        .eq('id', method.id);
+      if (deleteError) throw deleteError;
+
+      setPaymentMethods(current => current.filter(item => item.id !== method.id));
+      setError(null);
+      setToastMessage({ text: `"${method.display_name}" was deleted.`, type: 'success' });
+    } catch (err: unknown) {
+      const code = typeof err === 'object' && err !== null && 'code' in err && typeof err.code === 'string'
+        ? err.code
+        : '';
+      const message = code === '23503'
+        ? 'This payment channel is referenced by existing payments and cannot be deleted. Deactivate it instead.'
+        : getErrorMessage(err, 'Unable to delete payment channel.');
       setError(message);
       setToastMessage({ text: message, type: 'error' });
     }
@@ -366,6 +393,15 @@ export default function AdminPaymentSettingsPage() {
                         title="Edit channel"
                       >
                         <Edit2 className="w-3.5 h-3.5" />
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => void handleDeleteMethod(method)}
+                        aria-label={`Delete ${method.display_name}`}
+                        title="Delete channel"
+                        className="rounded-lg p-1 text-slate-400 transition hover:bg-red-50 hover:text-red-600"
+                      >
+                        <Trash2 className="h-3.5 w-3.5" />
                       </button>
                     </div>
                   </div>
