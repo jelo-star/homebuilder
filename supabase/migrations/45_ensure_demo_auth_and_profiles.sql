@@ -1,5 +1,6 @@
 -- Final idempotent repair for the three demo Auth accounts and app profiles.
 -- Does not remove application data and does not depend on the Auth trigger.
+-- Passwords are set only when creating missing accounts, never on existing users.
 
 do $$
 declare
@@ -56,7 +57,6 @@ begin
 
   update auth.users
   set
-    encrypted_password = v_hash,
     email_confirmed_at = coalesce(email_confirmed_at, now()),
     confirmation_token = coalesce(confirmation_token, ''),
     email_change = coalesce(email_change, ''),

@@ -1,5 +1,6 @@
 -- SMART CONTRACTOR MATCHING | 11
 -- Safe, repeatable seed script for the three required default development accounts.
+-- Existing account passwords are deliberately preserved when this script is rerun.
 -- Roles: Admin (admin@gmail.com), Homeowner (home@gmail.com), Contractor (cont@gmail.com)
 -- Password for all three: 123123 (hashed using pgcrypto blowfish crypt)
 
@@ -13,7 +14,7 @@ begin
   -- Generate secure bcrypt hash for '123123'
   v_hash := extensions.crypt('123123', extensions.gen_salt('bf'));
 
-  -- 1. Insert/Update Admin auth user
+  -- 1. Insert Admin auth user
   if not exists (select 1 from auth.users where email = 'admin@gmail.com') then
     insert into auth.users (
       id, instance_id, aud, role, email, encrypted_password, email_confirmed_at,
@@ -27,11 +28,11 @@ begin
     );
   else
     select id into v_admin_id from auth.users where email = 'admin@gmail.com';
-    update auth.users set encrypted_password = v_hash, email_confirmed_at = coalesce(email_confirmed_at, now())
+    update auth.users set email_confirmed_at = coalesce(email_confirmed_at, now())
     where id = v_admin_id;
   end if;
 
-  -- 2. Insert/Update Homeowner auth user
+  -- 2. Insert Homeowner auth user
   if not exists (select 1 from auth.users where email = 'home@gmail.com') then
     insert into auth.users (
       id, instance_id, aud, role, email, encrypted_password, email_confirmed_at,
@@ -45,11 +46,11 @@ begin
     );
   else
     select id into v_home_id from auth.users where email = 'home@gmail.com';
-    update auth.users set encrypted_password = v_hash, email_confirmed_at = coalesce(email_confirmed_at, now())
+    update auth.users set email_confirmed_at = coalesce(email_confirmed_at, now())
     where id = v_home_id;
   end if;
 
-  -- 3. Insert/Update Contractor auth user
+  -- 3. Insert Contractor auth user
   if not exists (select 1 from auth.users where email = 'cont@gmail.com') then
     insert into auth.users (
       id, instance_id, aud, role, email, encrypted_password, email_confirmed_at,
@@ -63,7 +64,7 @@ begin
     );
   else
     select id into v_cont_id from auth.users where email = 'cont@gmail.com';
-    update auth.users set encrypted_password = v_hash, email_confirmed_at = coalesce(email_confirmed_at, now())
+    update auth.users set email_confirmed_at = coalesce(email_confirmed_at, now())
     where id = v_cont_id;
   end if;
 

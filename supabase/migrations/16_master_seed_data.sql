@@ -1,7 +1,8 @@
 -- SMART CONTRACTOR MATCHING | 16: Comprehensive Master Seed Data
 -- Populates complete, realistic Philippine residential projects, contractors, credentials,
 -- portfolio items, quotes, milestone schedules, escrow ledger entries, and reviews.
--- Safe to re-run (idempotent with UPSERT / ON CONFLICT).
+-- Safe to re-run (idempotent with UPSERT / ON CONFLICT); existing passwords
+-- are preserved when demo accounts already exist.
 
 do $$
 declare
@@ -51,7 +52,7 @@ begin
     values (v_admin_id, '00000000-0000-0000-0000-000000000000', 'authenticated', 'authenticated', 'admin@gmail.com', v_hash, now(), '{"provider":"email","providers":["email"]}'::jsonb, '{"full_name":"Platform Administrator","role":"admin"}'::jsonb, now(), now());
   else
     select id into v_admin_id from auth.users where email = 'admin@gmail.com';
-    update auth.users set encrypted_password = v_hash, email_confirmed_at = coalesce(email_confirmed_at, now()) where id = v_admin_id;
+    update auth.users set email_confirmed_at = coalesce(email_confirmed_at, now()) where id = v_admin_id;
   end if;
 
   -- Homeowner 1 (home@gmail.com)
@@ -60,7 +61,7 @@ begin
     values (v_home_id, '00000000-0000-0000-0000-000000000000', 'authenticated', 'authenticated', 'home@gmail.com', v_hash, now(), '{"provider":"email","providers":["email"]}'::jsonb, '{"full_name":"Juan Homeowner","role":"homeowner"}'::jsonb, now(), now());
   else
     select id into v_home_id from auth.users where email = 'home@gmail.com';
-    update auth.users set encrypted_password = v_hash, email_confirmed_at = coalesce(email_confirmed_at, now()) where id = v_home_id;
+    update auth.users set email_confirmed_at = coalesce(email_confirmed_at, now()) where id = v_home_id;
   end if;
 
   -- Homeowner 2 (maria.home@gmail.com)
@@ -69,7 +70,7 @@ begin
     values (v_home2_id, '00000000-0000-0000-0000-000000000000', 'authenticated', 'authenticated', 'maria.home@gmail.com', v_hash, now(), '{"provider":"email","providers":["email"]}'::jsonb, '{"full_name":"Maria Santos","role":"homeowner"}'::jsonb, now(), now());
   else
     select id into v_home2_id from auth.users where email = 'maria.home@gmail.com';
-    update auth.users set encrypted_password = v_hash, email_confirmed_at = coalesce(email_confirmed_at, now()) where id = v_home2_id;
+    update auth.users set email_confirmed_at = coalesce(email_confirmed_at, now()) where id = v_home2_id;
   end if;
 
   -- Contractor 1 (cont@gmail.com)
@@ -78,7 +79,7 @@ begin
     values (v_cont_id, '00000000-0000-0000-0000-000000000000', 'authenticated', 'authenticated', 'cont@gmail.com', v_hash, now(), '{"provider":"email","providers":["email"]}'::jsonb, '{"full_name":"Apex Builders Construction","role":"contractor"}'::jsonb, now(), now());
   else
     select id into v_cont_id from auth.users where email = 'cont@gmail.com';
-    update auth.users set encrypted_password = v_hash, email_confirmed_at = coalesce(email_confirmed_at, now()) where id = v_cont_id;
+    update auth.users set email_confirmed_at = coalesce(email_confirmed_at, now()) where id = v_cont_id;
   end if;
 
   -- Contractor 2 (metrobuild@gmail.com)
@@ -87,7 +88,7 @@ begin
     values (v_cont2_id, '00000000-0000-0000-0000-000000000000', 'authenticated', 'authenticated', 'metrobuild@gmail.com', v_hash, now(), '{"provider":"email","providers":["email"]}'::jsonb, '{"full_name":"Engr. Carlo Gomez","role":"contractor"}'::jsonb, now(), now());
   else
     select id into v_cont2_id from auth.users where email = 'metrobuild@gmail.com';
-    update auth.users set encrypted_password = v_hash, email_confirmed_at = coalesce(email_confirmed_at, now()) where id = v_cont2_id;
+    update auth.users set email_confirmed_at = coalesce(email_confirmed_at, now()) where id = v_cont2_id;
   end if;
 
   -- Contractor 3 (solidrock@gmail.com)
@@ -96,7 +97,7 @@ begin
     values (v_cont3_id, '00000000-0000-0000-0000-000000000000', 'authenticated', 'authenticated', 'solidrock@gmail.com', v_hash, now(), '{"provider":"email","providers":["email"]}'::jsonb, '{"full_name":"Arch. Roberto Diaz","role":"contractor"}'::jsonb, now(), now());
   else
     select id into v_cont3_id from auth.users where email = 'solidrock@gmail.com';
-    update auth.users set encrypted_password = v_hash, email_confirmed_at = coalesce(email_confirmed_at, now()) where id = v_cont3_id;
+    update auth.users set email_confirmed_at = coalesce(email_confirmed_at, now()) where id = v_cont3_id;
   end if;
 
   -- =========================================================================

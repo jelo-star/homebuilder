@@ -13,6 +13,8 @@ Runtime user, contractor, project, quotation, payment, and settings records are 
 
 Apply the SQL files in `supabase/migrations` to the Supabase project in order; migrations must be applied separately from the application code. To manage the public homepage's Popular Home Services cards, apply `103_popular_services_management.sql` in the Supabase SQL Editor. This creates and seeds the `popular_services` table and refreshes the API schema cache. If the homepage reports that the table is missing, verify that this migration ran successfully, then reload the page.
 
+Do not rerun demo reset/seed SQL on a live project: `17_purge_and_reseed.sql` and `43_reset_and_seed_demo_system.sql` intentionally reset application data and demo passwords. The repeatable demo account repair migrations preserve passwords on existing accounts.
+
 ---
 
 ## 2. Core Modules & Directories

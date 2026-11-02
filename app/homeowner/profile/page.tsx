@@ -139,8 +139,25 @@ export default function HomeownerProfilePage() {
     setPasswordSaving(true);
     try {
       const supabase = createClient();
+      const { data: { user }, error: userError } = await supabase.auth.getUser();
+      if (userError) throw userError;
+      if (!user?.email || user.email.toLowerCase() !== email.toLowerCase()) {
+        throw new Error('Your signed-in account could not be verified. Sign in again and retry.');
+      }
+
       const { error: updateError } = await supabase.auth.updateUser({ password: newPassword });
       if (updateError) throw updateError;
+
+      const { data: verification, error: verificationError } = await supabase.auth.signInWithPassword({
+        email: user.email,
+        password: newPassword,
+      });
+      if (verificationError) {
+        throw new Error(`Supabase accepted the password update but could not verify the new login: ${verificationError.message}`);
+      }
+      if (verification.user?.id !== user.id) {
+        throw new Error('The new password verified against a different account. Contact support before continuing.');
+      }
 
       setNewPassword('');
       setConfirmPassword('');

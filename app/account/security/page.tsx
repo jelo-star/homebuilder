@@ -17,6 +17,7 @@ export default function AccountSecurityPage() {
   const router = useRouter();
   const [loading, setLoading] = React.useState(true);
   const [role, setRole] = React.useState<UserRole | null>(null);
+  const [email, setEmail] = React.useState('');
   const [newPassword, setNewPassword] = React.useState('');
   const [confirmPassword, setConfirmPassword] = React.useState('');
   const [saving, setSaving] = React.useState(false);
@@ -53,6 +54,7 @@ export default function AccountSecurityPage() {
 
         if (active) {
           setRole(profile.role as UserRole);
+          setEmail(user.email);
         }
       } catch (loadError) {
         if (active) setError(loadError instanceof Error ? loadError.message : 'Account details could not be loaded.');
@@ -81,8 +83,25 @@ export default function AccountSecurityPage() {
     setSaving(true);
     try {
       const supabase = createClient();
+      const { data: { user }, error: userError } = await supabase.auth.getUser();
+      if (userError) throw userError;
+      if (!user?.email || !email || user.email.toLowerCase() !== email.toLowerCase()) {
+        throw new Error('Your signed-in account could not be verified. Sign in again and retry.');
+      }
+
       const { error: updateError } = await supabase.auth.updateUser({ password: newPassword });
       if (updateError) throw updateError;
+
+      const { data: verification, error: verificationError } = await supabase.auth.signInWithPassword({
+        email,
+        password: newPassword,
+      });
+      if (verificationError) {
+        throw new Error(`Supabase accepted the password update but could not verify the new login: ${verificationError.message}`);
+      }
+      if (verification.user?.id !== user.id) {
+        throw new Error('The new password verified against a different account. Contact support before continuing.');
+      }
 
       setNewPassword('');
       setConfirmPassword('');

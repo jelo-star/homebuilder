@@ -14,7 +14,6 @@ where email is not null;
 
 update auth.users
 set
-  encrypted_password = extensions.crypt('123123', extensions.gen_salt('bf')),
   email_confirmed_at = coalesce(email_confirmed_at, now()),
   aud = coalesce(aud, 'authenticated'),
   role = coalesce(role, 'authenticated')
