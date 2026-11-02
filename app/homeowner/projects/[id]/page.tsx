@@ -168,6 +168,7 @@ function ProjectDetailsContent() {
   // Modals for viewer
   const [viewingContractorPortfolio, setViewingContractorPortfolio] = React.useState<{ contractor: ContractorProfile; items: any[] } | null>(null);
   const [viewingMaterialQuote, setViewingMaterialQuote] = React.useState<(Quote & { contractor_profile: ContractorProfile | null }) | null>(null);
+  const [openingQuotationId, setOpeningQuotationId] = React.useState<string | null>(null);
   const [viewingSlipTx, setViewingSlipTx] = React.useState<any | null>(null);
   const [viewingZoomPhoto, setViewingZoomPhoto] = React.useState<{ url: string; caption?: string } | null>(null);
   const [isPaymentModalOpen, setIsPaymentModalOpen] = React.useState(false);
@@ -945,6 +946,41 @@ function ProjectDetailsContent() {
       showToast(message, 'error', 'Award Failed');
     } finally {
       setAcceptingQuoteId(null);
+    }
+  };
+
+  const handleOpenQuotation = async (quote: Quote & { contractor_profile: ContractorProfile | null }) => {
+    if (!project) {
+      showToast('Project details are not available to create the quotation file.', 'error', 'Quotation Unavailable');
+      return;
+    }
+
+    const pdfTab = window.open('', '_blank');
+    if (!pdfTab) {
+      showToast('Allow pop-ups for this site to open the quotation PDF.', 'error', 'Pop-up Blocked');
+      return;
+    }
+    pdfTab.opener = null;
+    pdfTab.document.title = 'Preparing quotation';
+    pdfTab.document.body.innerHTML = '<p style="font: 16px sans-serif; padding: 24px;">Preparing quotation file…</p>';
+    setOpeningQuotationId(quote.id);
+
+    try {
+      const { createQuotationPdf } = await import('@/lib/utils/quotation-pdf');
+      const pdf = createQuotationPdf({
+        project,
+        quote,
+        contractorName: quote.contractor_profile?.business_name || 'Contractor',
+      });
+      const pdfUrl = URL.createObjectURL(pdf);
+      pdfTab.location.replace(pdfUrl);
+      window.setTimeout(() => URL.revokeObjectURL(pdfUrl), 30 * 60 * 1000);
+    } catch (error) {
+      pdfTab.close();
+      const message = error instanceof Error ? error.message : 'The quotation PDF could not be generated.';
+      showToast(message, 'error', 'Quotation File Failed');
+    } finally {
+      setOpeningQuotationId(null);
     }
   };
 
@@ -1944,11 +1980,12 @@ function ProjectDetailsContent() {
                                 <div className="flex flex-col gap-2 border-t border-slate-100 pt-3">
                                   <button
                                     type="button"
-                                    onClick={() => setViewingMaterialQuote(q)}
+                                    disabled={openingQuotationId === q.id}
+                                    onClick={() => void handleOpenQuotation(q)}
                                     className="inline-flex items-center justify-center gap-1.5 rounded-xl bg-emerald-700 px-3 py-2 text-xs font-bold text-white transition hover:bg-emerald-800"
                                   >
                                     <FileSpreadsheet className="h-3.5 w-3.5" />
-                                    See Quotation
+                                    {openingQuotationId === q.id ? 'Preparing Quotation…' : 'View Quotation PDF'}
                                   </button>
                                   <Link
                                     href={`/contractors/${q.contractor_id}?returnTo=${encodeURIComponent(returnTo)}`}
