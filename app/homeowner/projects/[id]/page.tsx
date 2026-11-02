@@ -1722,7 +1722,7 @@ function ProjectDetailsContent() {
               </div>}
 
               {/* Contractor Information Card */}
-              {activeTab === 'contractors' && <div className="h-[calc(100vh-8.5rem)] min-h-0 overflow-hidden rounded-2xl border border-slate-200 bg-white p-4 shadow-xs">
+              {activeTab === 'contractors' && <div className="min-h-0 rounded-2xl border border-slate-200 bg-white p-4 shadow-xs">
                 <div className="mb-3 flex items-center justify-between border-b border-slate-100 pb-2">
                   <div className="flex items-center gap-2">
                     <HardHat className="h-5 w-5 text-blue-600" />
@@ -1736,7 +1736,7 @@ function ProjectDetailsContent() {
                 </div>
 
                   {contractor ? (
-                  <div className="grid h-[calc(100%-3rem)] min-h-0 grid-cols-1 gap-4 text-xs xl:grid-cols-[minmax(230px,0.34fr)_minmax(0,0.66fr)]">
+                  <div className="grid min-h-0 grid-cols-1 gap-4 text-xs xl:grid-cols-[minmax(230px,0.34fr)_minmax(0,0.66fr)]">
                     <div className="flex min-h-0 flex-col gap-2.5">
                       <div className="rounded-xl border border-slate-100 bg-slate-50/60 p-3">
                         <span className="text-slate-400 block text-[11px]">Builder Firm</span>
@@ -1810,7 +1810,7 @@ function ProjectDetailsContent() {
                           )}
                         </div>
 
-                        <div className="max-h-[calc(100vh-20rem)] overflow-y-auto pr-1">
+                        <div>
                           <div className="grid gap-4 pb-1 sm:grid-cols-2 xl:grid-cols-3">
                           {submittedQuotes.map((q) => (
                             <div
