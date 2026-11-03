@@ -30,7 +30,6 @@ import {
   Sliders,
   FolderKanban,
   CreditCard,
-  KeyRound,
   ArrowLeft,
   UserRound
 } from 'lucide-react';
@@ -186,7 +185,6 @@ function AppLayoutContent({
           items: [
             { id: 'ho-payment-methods', label: 'Payment Methods', href: '/homeowner/payment-methods', icon: CreditCard },
             { id: 'ho-profile', label: 'Profile & Settings', href: '/homeowner/profile', icon: Users },
-            { id: 'ho-security', label: 'Account Security', href: '/account/security', icon: KeyRound },
           ]
         }
       ];
@@ -209,7 +207,6 @@ function AppLayoutContent({
           items: [
             { id: 'ct-profile', label: 'Business Profile', href: '/contractor/profile', icon: Building2 },
             { id: 'ct-verification', label: 'License Verification', href: '/contractor/verification', icon: ShieldCheck },
-            { id: 'ct-security', label: 'Account Security', href: '/account/security', icon: KeyRound },
           ]
         }
       ];
@@ -227,7 +224,6 @@ function AppLayoutContent({
             { id: 'adm-payment-settings', label: 'Payment Settings', href: '/admin/payment-settings', icon: Settings },
             { id: 'adm-settings', label: 'Platform Share & Rules', href: '/admin/settings', icon: Sliders },
             { id: 'adm-disputes', label: 'Disputes & Claims', href: '/admin/disputes', icon: AlertTriangle },
-            { id: 'adm-security', label: 'Account Security', href: '/account/security', icon: KeyRound },
           ]
         }
       ];
@@ -297,19 +293,6 @@ function AppLayoutContent({
             >
               <X className="w-4 h-4" />
             </button>
-          </div>
-
-          {/* User Status Bar */}
-          <div className="px-4 py-3 border-b border-slate-100/80 flex items-center justify-between bg-slate-50/60 shrink-0">
-            <div className="flex items-center gap-3 min-w-0">
-              <div className="w-9 h-9 rounded-full bg-emerald-50 text-emerald-800 flex items-center justify-center shrink-0 border border-emerald-100">
-                <UserRound className="h-4 w-4" aria-hidden="true" />
-              </div>
-              <div className="flex min-w-0 flex-col leading-tight">
-                <div className="text-xs font-semibold text-slate-800 truncate">{displayName}</div>
-                <div className="mt-0.5 text-[10px] text-slate-500">{roleLabel}</div>
-              </div>
-            </div>
           </div>
 
           {workspace && (

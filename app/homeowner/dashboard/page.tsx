@@ -209,7 +209,7 @@ export default function HomeownerDashboard() {
 
           <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-xs">
             <div className="flex items-center justify-between text-slate-500 text-xs font-medium">
-              <span>Open / In Bidding</span>
+              <span>Awaiting Contractor</span>
               <Clock className="w-4 h-4 text-amber-500" />
             </div>
             <div className="text-2xl font-bold text-slate-900 mt-2">{stats.open}</div>
