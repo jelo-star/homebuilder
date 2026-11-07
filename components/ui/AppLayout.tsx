@@ -29,9 +29,9 @@ import {
   Settings,
   Sliders,
   FolderKanban,
-  CreditCard,
   ArrowLeft,
-  UserRound
+  UserRound,
+  Bell
 } from 'lucide-react';
 
 export interface ProjectWorkspaceInfo {
@@ -65,6 +65,7 @@ function AppLayoutContent({
   children,
   userRole,
   userName,
+  unreadCount = 0,
   title,
   subtitle,
   showBackButton,
@@ -183,8 +184,8 @@ function AppLayoutContent({
         {
           group: 'Account',
           items: [
-            { id: 'ho-payment-methods', label: 'Payment Methods', href: '/homeowner/payment-methods', icon: CreditCard },
             { id: 'ho-profile', label: 'Profile & Settings', href: '/homeowner/profile', icon: Users },
+            { id: 'ho-notifications', label: 'Notifications', href: '/homeowner/notifications', icon: Bell },
           ]
         }
       ];
@@ -412,7 +413,20 @@ function AppLayoutContent({
             )}
           </div>
 
-          <div className="flex items-center gap-2.5 rounded-xl border border-slate-200 bg-white px-3.5 py-2 text-slate-800 shadow-2xs">
+          <div className="flex items-center gap-3">
+            <Link
+              href={userRole === 'admin' ? '/admin/notifications' : userRole === 'contractor' ? '/contractor/notifications' : '/homeowner/notifications'}
+              aria-label={unreadCount > 0 ? `${unreadCount} unread notifications` : 'Notifications'}
+              className="relative rounded-xl border border-slate-200 bg-white p-2.5 text-slate-500 shadow-2xs transition hover:border-blue-200 hover:bg-blue-50 hover:text-blue-700"
+            >
+              <Bell className="h-4 w-4" />
+              {unreadCount > 0 && (
+                <span className="absolute -right-1.5 -top-1.5 min-w-4 rounded-full bg-rose-500 px-1 text-center text-[9px] font-bold leading-4 text-white">
+                  {unreadCount > 9 ? '9+' : unreadCount}
+                </span>
+              )}
+            </Link>
+            <div className="flex items-center gap-2.5 rounded-xl border border-slate-200 bg-white px-3.5 py-2 text-slate-800 shadow-2xs">
             <span className="flex h-9 w-9 items-center justify-center rounded-full bg-slate-100 text-slate-500 ring-1 ring-slate-200">
               <UserRound className="h-4 w-4" aria-hidden="true" />
             </span>
@@ -420,6 +434,7 @@ function AppLayoutContent({
               <span className="max-w-40 truncate text-xs font-semibold">{displayName}</span>
               <span className="mt-0.5 text-[10px] text-slate-500">{roleLabel}</span>
             </span>
+            </div>
           </div>
         </header>
 

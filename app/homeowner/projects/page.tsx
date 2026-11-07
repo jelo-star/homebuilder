@@ -6,10 +6,6 @@ import AppLayout from '@/components/ui/AppLayout';
 import {
   Building2,
   MapPin,
-  CreditCard,
-  Eye,
-  FileSpreadsheet,
-  AlertTriangle,
   HardHat,
   Clock,
   Plus,
@@ -18,12 +14,14 @@ import {
   ChevronRight,
   FileText,
   Trash2,
-  X
+  X,
+  CalendarDays,
+  CheckCircle2,
+  MoreVertical
 } from 'lucide-react';
 import { createClient } from '@/lib/supabase/client';
 import { ContractorProfile, Project, Quote, Milestone } from '@/types/database';
-import { formatCurrency, cleanMilestoneTitle, removeUnderscore } from '@/lib/utils/formatters';
-import { exportProjectToExcel } from '@/lib/utils/excelExport';
+import { formatCurrency, cleanMilestoneTitle } from '@/lib/utils/formatters';
 import { useToast } from '@/components/ui/ToastProvider';
 
 const PROJECTS_PAGE_SIZE = 10;
@@ -66,18 +64,215 @@ async function fetchAllProjectIds(
   }
 }
 
+  function projectStatusLabel(project: ProjectListRow) {
+    if (project.status === 'completed' || project.displayStatus === 'Completed') return 'Completed';
+    if (project.status === 'in_progress') return 'In Progress';
+    if (project.status === 'project_planning' || project.status === 'awarded') return 'Planning';
+    if (project.proposalQuotes.length > 0 || project.status === 'quoted') return 'Reviewing Quotes';
+    if (project.status === 'open') return 'Awaiting Contractor';
+    return 'Draft';
+  }
+
+  function projectStatusClasses(project: ProjectListRow) {
+    const label = projectStatusLabel(project);
+    if (label === 'Completed') return 'bg-emerald-50 text-emerald-700 ring-emerald-100';
+    if (label === 'In Progress') return 'bg-blue-50 text-blue-700 ring-blue-100';
+    if (label === 'Reviewing Quotes') return 'bg-amber-50 text-amber-700 ring-amber-100';
+    return 'bg-slate-100 text-slate-600 ring-slate-200';
+  }
+
+  function projectNextStep(project: ProjectListRow) {
+    const current = project.currentMilestone;
+    if (current?.status === 'proof_submitted') return 'Awaiting Homeowner Verification';
+    if (current?.status === 'disputed' || project.status === 'disputed') return 'Reviewing milestone dispute';
+    if (current?.status === 'in_progress') return `${cleanMilestoneTitle(current.name)} in progress`;
+    if (project.status === 'quoted' || project.proposalQuotes.length > 0) return 'Reviewing Contractor Quotations';
+    if (project.status === 'open') return 'Waiting for Contractor Proposals';
+    if (project.status === 'project_planning') return 'Waiting for Project Plan';
+    if (project.status === 'completed') return 'Project Completed';
+    if (project.status === 'awarded') return 'Contractor is preparing the project plan';
+    return 'Continue setting up your project';
+  }
+
+  function ProjectCards({
+    projects,
+    onDelete,
+  }: {
+    projects: ProjectListRow[];
+    onDelete: (project: ProjectListRow) => void;
+  }) {
+
+    return (
+      <div className="grid gap-5 xl:grid-cols-2">
+        {projects.map(project => {
+          const completedMilestones = project.milestones.filter(milestone => milestone.status === 'approved' || milestone.status === 'paid').length;
+          const upcomingMilestone = project.milestones.find(milestone => milestone.status === 'locked');
+          const canDelete = ['open', 'draft', 'quoted'].includes(project.status) && !project.awarded_quote_id;
+          const status = projectStatusLabel(project);
+          return (
+            <article key={project.id} className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm transition hover:-translate-y-0.5 hover:border-blue-200 hover:shadow-md">
+              <div className="flex flex-col gap-4 p-4 sm:flex-row sm:p-5">
+                <div
+                  className="h-40 shrink-0 rounded-xl bg-gradient-to-br from-blue-100 via-slate-100 to-blue-50 bg-cover bg-center sm:w-40"
+                  style={project.plan_file_path ? { backgroundImage: `url("${project.plan_file_path}")` } : undefined}
+                >
+                  {!project.plan_file_path && <Building2 className="mx-auto mt-14 h-9 w-9 text-blue-200" />}
+                </div>
+                <div className="min-w-0 flex-1">
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="min-w-0">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <Link href={`/homeowner/projects/${project.id}`} className="truncate text-base font-bold text-slate-900 hover:text-blue-600">{project.title}</Link>
+                        <span className={`rounded-full px-2.5 py-1 text-[10px] font-bold ring-1 ${projectStatusClasses(project)}`}>{status}</span>
+                      </div>
+                      <div className="mt-2 flex flex-wrap gap-x-3 gap-y-1 text-xs text-slate-500">
+                        <span className="inline-flex items-center gap-1"><MapPin className="h-3.5 w-3.5" />{project.city}{project.province ? `, ${project.province}` : ''}</span>
+                        <span className="inline-flex items-center gap-1"><CalendarDays className="h-3.5 w-3.5" />Created {new Date(project.created_at).toLocaleDateString()}</span>
+                      </div>
+                    </div>
+                    <button type="button" aria-label={`Actions for ${project.title}`} className="rounded-lg p-1.5 text-slate-400 hover:bg-slate-100 hover:text-slate-700"><MoreVertical className="h-4 w-4" /></button>
+                  </div>
+
+                  <div className="mt-4 grid grid-cols-2 gap-3 text-xs">
+                    <div className="rounded-xl bg-slate-50 p-3"><span className="text-slate-400">Project type</span><p className="mt-1 font-semibold capitalize text-slate-700">{project.work_type.replace('_', ' ')}</p></div>
+                    <div className="rounded-xl bg-slate-50 p-3"><span className="text-slate-400">Contractor</span><p className="mt-1 truncate font-semibold text-slate-700">{project.contractor?.business_name || (project.proposalQuotes.length > 0 ? 'Reviewing proposals' : 'Awaiting contractor')}</p></div>
+                  </div>
+                </div>
+              </div>
+
+              {project.awardedQuote && (
+                <div className="grid grid-cols-2 gap-3 border-y border-slate-100 bg-slate-50/60 px-4 py-4 text-xs sm:grid-cols-4 sm:px-5">
+                  <div><span className="text-slate-400">Agreed amount</span><p className="mt-1 font-bold text-slate-900">{project.agreedAmount == null ? 'Unavailable' : formatCurrency(project.agreedAmount)}</p></div>
+                  <div><span className="text-slate-400">Released</span><p className="mt-1 font-bold text-emerald-700">{formatCurrency(project.moneyReleased)}</p></div>
+                  <div><span className="text-slate-400">In escrow</span><p className="mt-1 font-bold text-amber-700">{formatCurrency(project.moneyInEscrow)}</p></div>
+                  <div><span className="text-slate-400">Remaining</span><p className="mt-1 font-bold text-slate-900">{project.remainingBalance == null ? 'Unavailable' : formatCurrency(project.remainingBalance)}</p></div>
+                </div>
+              )}
+
+              {project.isBuildActive && (
+                <div className="px-4 pb-4 pt-4 sm:px-5">
+                  <div className="flex items-center justify-between text-xs font-semibold text-slate-600"><span>Project progress</span><span className="text-blue-700">{project.completionPercentage}%</span></div>
+                  <div className="mt-2 h-2 overflow-hidden rounded-full bg-slate-100"><div className="h-full rounded-full bg-blue-600" style={{ width: `${project.completionPercentage}%` }} /></div>
+                  <div className="mt-3 flex flex-wrap items-center gap-3 text-[11px] text-slate-500">
+                    <span className="inline-flex items-center gap-1"><CheckCircle2 className="h-3.5 w-3.5 text-emerald-600" />{completedMilestones} of {project.milestones.length} milestones complete</span>
+                    {upcomingMilestone && <span className="inline-flex items-center gap-1"><Clock className="h-3.5 w-3.5 text-blue-600" />Next: {cleanMilestoneTitle(upcomingMilestone.name)}</span>}
+                  </div>
+                </div>
+              )}
+
+              {!project.isBuildActive && project.proposalQuotes.length > 0 && (
+                <div className="flex items-center justify-between border-t border-blue-100 bg-blue-50/60 px-4 py-3 text-xs sm:px-5">
+                  <span className="font-semibold text-blue-800">{project.proposalQuotes.length} quotation{project.proposalQuotes.length === 1 ? '' : 's'} received</span>
+                  <Link href={`/homeowner/projects/${project.id}`} className="font-bold text-blue-700 hover:text-blue-900">Review Quotations <ChevronRight className="inline h-3.5 w-3.5" /></Link>
+                </div>
+              )}
+
+              <div className="flex flex-col gap-3 border-t border-slate-100 px-4 py-4 sm:flex-row sm:items-center sm:justify-between sm:px-5">
+                <div className="min-w-0"><span className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Next required action</span><p className="mt-1 truncate text-sm font-semibold text-slate-700">{projectNextStep(project)}</p></div>
+                <div className="flex shrink-0 gap-2">
+                  {canDelete && <button type="button" onClick={() => onDelete(project)} className="inline-flex items-center gap-1.5 rounded-xl border border-rose-200 px-3 py-2 text-xs font-bold text-rose-600 hover:bg-rose-50"><Trash2 className="h-3.5 w-3.5" />Delete</button>}
+                  <Link href={`/homeowner/projects/${project.id}`} className="inline-flex items-center gap-1.5 rounded-xl bg-blue-600 px-3.5 py-2 text-xs font-bold text-white hover:bg-blue-700">{project.isBuildActive ? 'Manage Project' : 'View Project'} <ChevronRight className="h-3.5 w-3.5" /></Link>
+                </div>
+              </div>
+            </article>
+          );
+        })}
+      </div>
+    );
+  }
+
+function ProjectsDashboard({
+  loading,
+  loadError,
+  projects,
+  filter,
+  setFilter,
+  categoryCounts,
+  search,
+  setSearch,
+  page,
+  setPage,
+  totalCount,
+  isPending,
+  startTransition,
+  projectToDelete,
+  setProjectToDeleteClosed,
+  handleConfirmDelete,
+  isDeleting,
+}: {
+  loading: boolean;
+  loadError: string;
+  projects: ProjectListRow[];
+  filter: 'projects' | 'active' | 'quotes' | 'completed';
+  setFilter: React.Dispatch<React.SetStateAction<'projects' | 'active' | 'quotes' | 'completed'>>;
+  categoryCounts: { all: number; active: number; quotes: number; completed: number };
+  search: string;
+  setSearch: React.Dispatch<React.SetStateAction<string>>;
+  page: number;
+  setPage: React.Dispatch<React.SetStateAction<number>>;
+  totalCount: number;
+  isPending: boolean;
+  startTransition: React.TransitionStartFunction;
+  projectToDelete: ProjectListRow | null;
+  setProjectToDeleteClosed: (project: ProjectListRow | null) => void;
+  handleConfirmDelete: () => void;
+  isDeleting: boolean;
+}) {
+  return (
+    <AppLayout userRole="homeowner" userName="Homeowner" title="My Projects" subtitle="Manage your residential projects, review contractor proposals, and monitor construction progress." showBackButton={false}>
+      <div className="mx-auto w-full max-w-[1500px] space-y-6">
+        {loadError && <div className="rounded-2xl border border-rose-200 bg-rose-50 p-4 text-sm font-semibold text-rose-700">Project records could not be loaded: {loadError}</div>}
+        <section className="relative overflow-hidden rounded-3xl bg-[#083b72] px-6 py-7 text-white shadow-sm sm:px-9" style={{ backgroundImage: 'linear-gradient(90deg, rgba(4,38,81,.96), rgba(7,62,121,.7), rgba(7,62,121,.15)), url("https://images.unsplash.com/photo-1600607687920-4e2a09cf159d?auto=format&fit=crop&w=1600&q=85")', backgroundPosition: 'center', backgroundSize: 'cover' }}>
+          <h1 className="flex items-center gap-2 text-2xl font-bold tracking-tight sm:text-3xl"><Building2 className="h-7 w-7" /> Your Projects, Our Priority</h1>
+          <p className="mt-2 text-sm text-blue-100">Track progress, stay updated, and build your dream home.</p>
+        </section>
+        <section className="flex flex-col gap-4 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm lg:flex-row lg:items-center lg:justify-between">
+          <div className="flex min-w-0 gap-2 overflow-x-auto pb-1">
+            {[
+              { key: 'projects' as const, label: 'All Projects', count: categoryCounts.all, icon: Building2 },
+              { key: 'active' as const, label: 'Active Builds', count: categoryCounts.active, icon: HardHat },
+              { key: 'quotes' as const, label: 'Reviewing Quotes', count: categoryCounts.quotes, icon: FileText },
+              { key: 'completed' as const, label: 'Completed', count: categoryCounts.completed, icon: CheckCircle2 },
+            ].map(tab => {
+              const Icon = tab.icon;
+              return <button key={tab.key} type="button" onClick={() => startTransition(() => { setFilter(tab.key); setPage(0); })} className={`inline-flex shrink-0 items-center gap-2 rounded-xl px-4 py-2.5 text-xs font-bold transition ${filter === tab.key ? 'bg-blue-600 text-white shadow-sm' : 'border border-slate-200 bg-white text-slate-600 hover:border-blue-200 hover:bg-blue-50'} ${isPending ? 'cursor-wait' : ''}`}><Icon className="h-4 w-4" />{tab.label}<span className={`rounded-full px-1.5 py-0.5 text-[10px] ${filter === tab.key ? 'bg-white/20 text-white' : 'bg-slate-100 text-slate-500'}`}>{tab.count}</span></button>;
+            })}
+          </div>
+          <div className="flex flex-col gap-3 sm:flex-row">
+            <div className="relative min-w-0 sm:w-64"><Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" /><input value={search} onChange={event => { setSearch(event.target.value); setPage(0); }} placeholder="Search project, contractor, or location..." className="w-full rounded-xl border border-slate-200 bg-slate-50 py-2.5 pl-9 pr-3 text-xs outline-none focus:border-blue-400 focus:bg-white focus:ring-2 focus:ring-blue-500/10" /></div>
+            <Link href="/homeowner/projects/create" className="inline-flex items-center justify-center gap-2 rounded-xl bg-blue-600 px-4 py-2.5 text-xs font-bold text-white shadow-sm hover:bg-blue-700"><Plus className="h-4 w-4" /> Create Project</Link>
+          </div>
+        </section>
+        {loading && projects.length === 0 ? <div className="grid gap-5 xl:grid-cols-2">{[1, 2, 3, 4].map(item => <div key={item} className="h-72 animate-pulse rounded-2xl border border-slate-200 bg-white" />)}</div> : projects.length === 0 ? (
+          <div className="rounded-2xl border border-slate-200 bg-white px-6 py-16 text-center shadow-sm"><Building2 className="mx-auto h-12 w-12 text-slate-300" /><h2 className="mt-4 text-lg font-bold text-slate-900">{filter === 'active' ? "You don't have any active construction projects." : filter === 'quotes' ? 'No contractor quotations are awaiting review.' : filter === 'completed' ? 'No completed projects yet.' : search ? 'No projects match your search.' : "You haven't created any projects yet."}</h2><p className="mx-auto mt-2 max-w-md text-sm text-slate-500">{search ? 'Try another project name, contractor, or location.' : 'Create a project to estimate costs and connect with verified contractors.'}</p>{!search && filter !== 'completed' && <Link href="/homeowner/projects/create" className="mt-5 inline-flex items-center gap-2 rounded-xl bg-blue-600 px-4 py-2.5 text-sm font-bold text-white hover:bg-blue-700"><Plus className="h-4 w-4" /> Create Project</Link>}</div>
+        ) : <div className={`transition-opacity duration-200 ${loading || isPending ? 'opacity-60' : 'opacity-100'}`} aria-busy={loading || isPending}><ProjectCards projects={projects} onDelete={setProjectToDeleteClosed} /></div>}
+        {!loading && <div className="flex flex-col items-center justify-between gap-3 rounded-xl border border-slate-200 bg-white px-4 py-3 sm:flex-row"><p className="text-xs text-slate-500" aria-live="polite">{totalCount === 0 ? 'Showing 0 of 0 projects' : `Showing ${page * PROJECTS_PAGE_SIZE + 1}–${Math.min((page + 1) * PROJECTS_PAGE_SIZE, totalCount)} of ${totalCount} projects`}</p>{totalCount > PROJECTS_PAGE_SIZE && <div className="flex items-center gap-2"><button type="button" onClick={() => startTransition(() => setPage(current => Math.max(0, current - 1)))} disabled={page === 0 || loading || isPending} className="inline-flex items-center gap-1 rounded-lg border border-slate-200 px-3 py-2 text-xs font-semibold text-slate-700 disabled:opacity-50"><ChevronLeft className="h-4 w-4" /> Previous</button><span className="px-2 text-xs text-slate-500">Page {page + 1} of {Math.ceil(totalCount / PROJECTS_PAGE_SIZE)}</span><button type="button" onClick={() => startTransition(() => setPage(current => current + 1))} disabled={loading || isPending || (page + 1) * PROJECTS_PAGE_SIZE >= totalCount} className="inline-flex items-center gap-1 rounded-lg border border-slate-200 px-3 py-2 text-xs font-semibold text-slate-700 disabled:opacity-50">Next <ChevronRight className="h-4 w-4" /></button></div>}</div>}
+        {projectToDelete && <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 p-4 backdrop-blur-sm"><div className="w-full max-w-md space-y-4 rounded-2xl border border-slate-200 bg-white p-6 shadow-2xl"><div className="flex items-center justify-between"><h2 className="flex items-center gap-2 text-base font-bold text-rose-600"><Trash2 className="h-5 w-5" /> Delete Project</h2><button type="button" onClick={() => setProjectToDeleteClosed(null)} aria-label="Close dialog" className="rounded-lg p-2 text-slate-400 hover:bg-slate-100"><X className="h-4 w-4" /></button></div><p className="text-sm text-slate-600">Are you sure you want to permanently delete <strong>{projectToDelete.title}</strong>? This action cannot be undone.</p><div className="flex justify-end gap-2"><button type="button" onClick={() => setProjectToDeleteClosed(null)} className="rounded-xl border border-slate-200 px-4 py-2 text-xs font-bold text-slate-600">Cancel</button><button type="button" onClick={handleConfirmDelete} disabled={isDeleting} className="rounded-xl bg-rose-600 px-4 py-2 text-xs font-bold text-white disabled:opacity-50">{isDeleting ? 'Deleting...' : 'Delete Project'}</button></div></div></div>}
+      </div>
+    </AppLayout>
+  );
+}
+
 export default function HomeownerProjectsPage() {
   const { showToast } = useToast();
   const [loading, setLoading] = React.useState(true);
   const [projects, setProjects] = React.useState<ProjectListRow[]>([]);
   const [filter, setFilter] = React.useState<'projects' | 'active' | 'quotes' | 'completed'>('projects');
   const [search, setSearch] = React.useState('');
+  const [debouncedSearch, setDebouncedSearch] = React.useState('');
   const [page, setPage] = React.useState(0);
   const [totalCount, setTotalCount] = React.useState(0);
+  const [categoryCounts, setCategoryCounts] = React.useState({ all: 0, active: 0, quotes: 0, completed: 0 });
   const [projectToDelete, setProjectToDelete] = React.useState<ProjectListRow | null>(null);
   const [isDeleting, setIsDeleting] = React.useState(false);
   const [loadError, setLoadError] = React.useState('');
   const loadRequestId = React.useRef(0);
+  const [isPending, startTransition] = React.useTransition();
+
+  React.useEffect(() => {
+    const timer = window.setTimeout(() => setDebouncedSearch(search), 300);
+    return () => window.clearTimeout(timer);
+  }, [search]);
 
   const loadData = React.useCallback(async () => {
     const requestId = ++loadRequestId.current;
@@ -97,9 +292,49 @@ export default function HomeownerProjectsPage() {
     if (!user) {
       setProjects([]);
       setTotalCount(0);
+      setCategoryCounts({ all: 0, active: 0, quotes: 0, completed: 0 });
       setLoading(false);
       return;
     }
+
+    const ownerProjectsResult = await supabase
+      .from('projects')
+      .select('id, status')
+      .eq('homeowner_id', user.id);
+    if (requestId !== loadRequestId.current) return;
+    if (ownerProjectsResult.error) {
+      setLoadError(ownerProjectsResult.error.message);
+      setProjects([]);
+      setTotalCount(0);
+      setLoading(false);
+      return;
+    }
+    const ownerProjectRows = ownerProjectsResult.data || [];
+    const ownerProjectIds = ownerProjectRows.map(project => project.id);
+    let quoteCount = 0;
+    if (ownerProjectIds.length > 0) {
+      const quoteCountResult = await supabase
+        .from('quotes')
+        .select('project_id')
+        .in('project_id', ownerProjectIds)
+        .in('status', ['submitted', 'revised', 'revision_requested']);
+      if (quoteCountResult.error) {
+        setLoadError(quoteCountResult.error.message);
+        setProjects([]);
+        setTotalCount(0);
+        setLoading(false);
+        return;
+      }
+      quoteCount = new Set((quoteCountResult.data || []).map(quote => quote.project_id)).size;
+    }
+    setCategoryCounts({
+      all: ownerProjectRows.length,
+      active: ownerProjectRows.filter(project => ['awarded', 'project_planning', 'in_progress', 'disputed'].includes(project.status)).length,
+      quotes: new Set(ownerProjectRows.filter(project => ['draft', 'open', 'quoted'].includes(project.status)).map(project => project.id)).size > 0
+        ? quoteCount
+        : 0,
+      completed: ownerProjectRows.filter(project => project.status === 'completed').length,
+    });
 
     const statusFilter: Project['status'][] | null = filter === 'active'
       ? ['awarded', 'project_planning', 'in_progress', 'disputed']
@@ -154,8 +389,8 @@ export default function HomeownerProjectsPage() {
       }
     }
 
-    if (search !== '') {
-      const searchPattern = `%${search.replace(/[\\%_]/g, '\\$&')}%`;
+    if (debouncedSearch !== '') {
+      const searchPattern = `%${debouncedSearch.replace(/[\\%_]/g, '\\$&')}%`;
       const [titleResult, cityResult, contractorResult] = await Promise.all([
         fetchAllProjectIds((from, to) => {
           let query = supabase.from('projects').select('id').eq('homeowner_id', user.id).ilike('title', searchPattern).order('id');
@@ -375,75 +610,15 @@ export default function HomeownerProjectsPage() {
 
     setProjects(enriched);
     setLoading(false);
-  }, [filter, page, search]);
+  }, [filter, page, debouncedSearch]);
 
   React.useEffect(() => {
-    loadData();
-    return () => { loadRequestId.current += 1; };
+    const request = window.setTimeout(() => { void loadData(); }, 0);
+    return () => {
+      window.clearTimeout(request);
+      loadRequestId.current += 1;
+    };
   }, [loadData]);
-
-  const handleExportProject = (project: any) => {
-    exportProjectToExcel({
-      project: {
-        id: project.id,
-        title: project.title,
-        house_type: project.house_type,
-        work_type: project.work_type,
-        floor_area_sqm: project.floor_area_sqm,
-        floors: project.floors,
-        finish_level: project.finish_level,
-        city: project.city || undefined,
-        province: project.province || undefined,
-        status: project.status,
-        created_at: project.created_at,
-        budget: project.budget || undefined,
-        est_mid: project.est_mid || undefined
-      },
-      contractor: project.contractor ? {
-        business_name: project.contractor.business_name,
-        trade_name: project.contractor.trade_name || undefined,
-        authorized_representative: project.contractor.authorized_representative || undefined,
-        license_no: project.contractor.license_no || project.contractor.pcab_license_no || undefined,
-        business_email: project.contractor.business_email || undefined,
-        business_phone: project.contractor.business_phone || undefined
-      } : null,
-      quote: project.awardedQuote ? {
-        price: project.awardedQuote.price,
-        duration_months: project.awardedQuote.duration_months,
-        status: project.awardedQuote.status
-      } : null,
-      milestones: project.milestones?.map((m: any) => ({
-        seq: m.seq,
-        name: m.name,
-        percent: m.percent,
-        amount: m.amount,
-        status: m.status,
-        proof_submitted_at: m.proof_submitted_at || undefined,
-        paid_at: m.paid_at || undefined,
-        proofs: m.proofs?.map((pr: any) => ({
-          note: pr.note || undefined,
-          created_at: pr.created_at || undefined
-        }))
-      })),
-      transactions: project.transactions?.map((t: any) => ({
-        transaction_ref: t.transaction_ref,
-        provider_tx_ref: t.provider_tx_ref,
-        provider: t.provider,
-        payment_method: t.payment_method,
-        amount_centavos: t.amount_centavos,
-        payment_status: t.payment_status,
-        created_at: t.created_at,
-        verified_at: t.verified_at
-      })),
-      financials: {
-        agreedAmount: project.agreedAmount,
-        moneyReleased: project.moneyReleased,
-        moneyInEscrow: project.moneyInEscrow,
-        remainingBalance: project.remainingBalance
-      },
-      lineItems: (project.awardedQuote as any)?.line_items || []
-    });
-  };
 
   const handleConfirmDelete = async () => {
     if (!projectToDelete) return;
@@ -470,494 +645,23 @@ export default function HomeownerProjectsPage() {
     else loadData();
   };
 
-  return (
-    <AppLayout
-      userRole="homeowner"
-      userName="Homeowner"
-      title="My Projects"
-      subtitle="Supervise awarded residential builds, inspect contractor milestones, and release milestone funds"
-      showBackButton={false}
-    >
-      <div className="w-full space-y-6">
-        {loadError && (
-          <div className="p-4 rounded-xl bg-white border border-red-200 text-red-700 text-xs font-semibold">
-            Project records could not be loaded: {loadError}
-          </div>
-        )}
-        {/* Top Filter & Search Action Bar (No Status Count Boxes) */}
-        <div className="bg-white p-4 sm:p-5 rounded-2xl border border-slate-200 shadow-xs flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-4">
-          <div className="flex flex-wrap gap-2">
-            {[
-              { key: 'projects' as const, label: 'Projects' },
-              { key: 'active' as const, label: 'Active Builds' },
-              { key: 'quotes' as const, label: 'Reviewing Quotes' },
-              { key: 'completed' as const, label: 'Completed' },
-            ].map((tab) => (
-              <button
-                key={tab.key}
-                type="button"
-                onClick={() => {
-                  setFilter(tab.key);
-                  setPage(0);
-                }}
-                className={`px-3.5 py-2 rounded-xl text-xs font-bold transition-all ${filter === tab.key
-                  ? 'bg-blue-600 text-white shadow-xs'
-                  : 'bg-slate-50 text-slate-600 hover:bg-slate-100 border border-slate-200/80'
-                  }`}
-              >
-                {tab.label}
-              </button>
-            ))}
-          </div>
-
-          <div className="flex items-center gap-3">
-            <div className="relative flex-1 sm:w-64">
-              <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
-              <input
-                type="text"
-                placeholder="Search project, builder, city..."
-                value={search}
-                onChange={(e) => {
-                  setSearch(e.target.value);
-                  setPage(0);
-                }}
-                className="w-full pl-9 pr-3 py-2 text-xs rounded-xl border border-slate-200 bg-slate-50/60 focus:bg-white focus:outline-none focus:ring-2 focus:ring-blue-500/20"
-              />
-            </div>
-            <Link
-              href="/homeowner/projects/create"
-              className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs shadow-xs transition-all shrink-0"
-            >
-              <Plus className="w-4 h-4" />
-              <span>Create Project</span>
-            </Link>
-          </div>
-        </div>
-
-        {/* Project List */}
-        {loading ? (
-          <div className="p-16 text-center text-xs text-slate-400 bg-white rounded-2xl border border-slate-200">
-            Loading your projects...
-          </div>
-        ) : projects.length === 0 ? (
-          <div className="bg-white p-14 rounded-2xl border border-slate-200 text-center space-y-3 shadow-xs">
-            <div className="w-12 h-12 rounded-2xl bg-blue-50 text-blue-600 flex items-center justify-center mx-auto">
-              <Building2 className="w-6 h-6" />
-            </div>
-            <h3 className="font-bold text-slate-900 text-base">No construction projects found</h3>
-            <p className="text-xs text-slate-500 max-w-md mx-auto leading-relaxed">
-              Create a new residential build project to receive verified contractor proposals, or adjust your filter selection above.
-            </p>
-            <div className="pt-2">
-              <Link
-                href="/homeowner/projects/create"
-                className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs shadow-xs transition-all"
-              >
-                <Plus className="w-4 h-4" />
-                <span>Create New Project</span>
-              </Link>
-            </div>
-          </div>
-        ) : (
-          <div className="space-y-6">
-            {projects.map((p) => {
-              const currentMilestone = p.currentMilestone;
-              const cleanMilestoneName = currentMilestone
-                ? cleanMilestoneTitle(currentMilestone.name)
-                : 'No milestone scheduled';
-              const isDisputed = currentMilestone?.status === 'disputed' || p.status === 'disputed';
-              const isProofSubmitted = currentMilestone?.status === 'proof_submitted';
-              const currentMilestoneLabel = currentMilestone
-                ? (currentMilestone.seq == null ? cleanMilestoneName : `Stage ${currentMilestone.seq}: ${cleanMilestoneName}`)
-                : cleanMilestoneName;
-              const currentMilestoneStatus = currentMilestone?.status ?? 'in_progress';
-
-              if (p.isBuildActive) {
-                return (
-                  <div
-                    key={p.id}
-                    className="bg-white rounded-2xl border border-slate-200 shadow-xs hover:shadow-md transition-all p-6"
-                  >
-                    <div className="flex flex-col md:flex-row md:items-center justify-between gap-5">
-                      <div className="space-y-2 min-w-0">
-                        <div className="flex items-center gap-2.5 flex-wrap">
-                          <h2 className="font-bold text-slate-900 text-lg">{p.title}</h2>
-                          <span className={`px-2.5 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider ${
-                            p.displayStatus === 'Completed'
-                              ? 'bg-emerald-100 text-emerald-800'
-                              : p.displayStatus === 'In Progress'
-                                ? 'bg-blue-100 text-blue-800'
-                                : 'bg-indigo-100 text-indigo-800'
-                          }`}>
-                            {p.displayStatus}
-                          </span>
-                        </div>
-                        <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-slate-500">
-                          <span className="flex items-center gap-1">
-                            <MapPin className="w-3.5 h-3.5 text-slate-400" />
-                            {p.city}{p.province ? `, ${p.province}` : ''}
-                          </span>
-                          {p.contractor?.business_name && (
-                            <span className="flex items-center gap-1">
-                              <HardHat className="w-3.5 h-3.5 text-blue-600" />
-                              Builder: <strong className="text-slate-800">{p.contractor.business_name}</strong>
-                            </span>
-                          )}
-                          {p.currentMilestone && (
-                            <span className="flex items-center gap-1">
-                              <Clock className="w-3.5 h-3.5 text-indigo-600" />
-                              Milestone: <strong className="text-slate-800">{cleanMilestoneName}</strong>
-                            </span>
-                          )}
-                        </div>
-                      </div>
-                      <Link
-                        href={`/homeowner/projects/${p.id}`}
-                        className="w-full md:w-auto px-5 py-2.5 rounded-xl bg-[#136F48] hover:bg-[#0f5738] text-white text-xs font-bold shadow-xs flex items-center justify-center gap-1.5 transition-colors"
-                      >
-                        <FileText className="w-4 h-4" />
-                        <span>Manage</span>
-                      </Link>
-                    </div>
-                  </div>
-                );
-              }
-
-              // Legacy active card retained below for reference while older cached builds refresh.
-              if (false && p.isBuildActive) {
-                return (
-                  <div
-                    key={p.id}
-                    className="bg-white rounded-2xl border border-slate-200 shadow-xs hover:shadow-md transition-all overflow-hidden"
-                  >
-                    {/* Top Bar with Project Name, Location, Status, and Export */}
-                    <div className="p-6 border-b border-slate-100 flex flex-col md:flex-row justify-between items-start md:items-center gap-4 bg-slate-50/50">
-                      <div className="space-y-1">
-                        <div className="flex items-center gap-2.5 flex-wrap">
-                          <h2 className="font-bold text-slate-900 text-lg">{p.title}</h2>
-                          <span className={`px-2.5 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider ${isDisputed ? 'bg-amber-100 text-amber-800 border border-amber-200' :
-                            p.status === 'in_progress' ? 'bg-blue-100 text-blue-800' :
-                              p.status === 'awarded' ? 'bg-indigo-100 text-indigo-800' :
-                                'bg-emerald-100 text-emerald-800'
-                            }`}>
-                            {removeUnderscore(p.status)}
-                          </span>
-                          {isDisputed && (
-                            <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-amber-500 text-white flex items-center gap-1">
-                              <AlertTriangle className="w-3 h-3" />
-                              Dispute Under Mediation
-                            </span>
-                          )}
-                        </div>
-
-                        <div className="flex items-center gap-2 text-xs text-slate-500 flex-wrap">
-                          <span className="flex items-center gap-1 text-slate-400">
-                            <MapPin className="w-3.5 h-3.5" />
-                            {p.city}{p.province ? `, ${p.province}` : ''}
-                          </span>
-                          <span>•</span>
-                          <span className="flex items-center gap-1">
-                            <HardHat className="w-3.5 h-3.5 text-blue-600" />
-                            Contractor: <strong className="text-slate-800 font-semibold">{p.contractor?.business_name ?? 'Pending Contractor Selection'}</strong>
-                          </span>
-                        </div>
-                      </div>
-
-                      <div className="flex items-center gap-2">
-                        <button
-                          type="button"
-                          onClick={() => handleExportProject(p)}
-                          className="px-3.5 py-2 rounded-xl bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border border-emerald-200 text-xs font-bold transition flex items-center gap-1.5 shadow-2xs"
-                          title="Export complete project data, milestones, and payment logs to Excel"
-                        >
-                          <FileSpreadsheet className="w-4 h-4 text-emerald-600" />
-                          <span>Export to Excel</span>
-                        </button>
-                      </div>
-                    </div>
-
-                    {/* 8 Required Fields Display Grid */}
-                    <div className="p-6 space-y-6">
-                      {/* Financial Metrics Row */}
-                      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                        {/* 1. Agreed Cost */}
-                        <div className="p-4 rounded-xl bg-slate-50 border border-slate-100">
-                          <div className="text-[11px] text-slate-500 font-medium uppercase tracking-wider">Agreed Cost</div>
-                          <div className="text-base sm:text-lg font-bold text-slate-900 mt-1">
-                            {p.agreedAmount == null ? 'Unavailable' : formatCurrency(p.agreedAmount)}
-                          </div>
-                          <div className="text-[10px] text-slate-400 mt-0.5">Agreed contract cost</div>
-                        </div>
-
-                        {/* 2. Money Released */}
-                        <div className="p-4 rounded-xl bg-emerald-50/60 border border-emerald-100">
-                          <div className="text-[11px] text-emerald-700 font-medium uppercase tracking-wider">Money Released</div>
-                          <div className="text-base sm:text-lg font-bold text-emerald-700 mt-1">
-                            {formatCurrency(p.moneyReleased)}
-                          </div>
-                          <div className="text-[10px] text-emerald-600 mt-0.5">Paid out to builder</div>
-                        </div>
-
-                        {/* 3. Remaining Balance */}
-                        <div className="p-4 rounded-xl bg-slate-50 border border-slate-100">
-                          <div className="text-[11px] text-slate-500 font-medium uppercase tracking-wider">Remaining Balance</div>
-                          <div className="text-base sm:text-lg font-bold text-slate-800 mt-1">
-                            {p.remainingBalance == null ? 'Unavailable' : formatCurrency(p.remainingBalance)}
-                          </div>
-                          <div className="text-[10px] text-slate-400 mt-0.5">Balance yet to complete</div>
-                        </div>
-
-                        {/* 4. Money in Escrow */}
-                        <div className="p-4 rounded-xl bg-blue-50/60 border border-blue-100">
-                          <div className="text-[11px] text-blue-700 font-medium uppercase tracking-wider">Money in Escrow</div>
-                          <div className="text-base sm:text-lg font-bold text-blue-700 mt-1">
-                            {formatCurrency(p.moneyInEscrow)}
-                          </div>
-                          <div className="text-[10px] text-blue-600 mt-0.5">Safeguarded vault funds</div>
-                        </div>
-                      </div>
-
-                      {/* Current Milestone of the Contractor Box with Pay & Inspect Milestone Buttons */}
-                      <div className="p-4 sm:p-5 rounded-xl border border-blue-100 bg-gradient-to-r from-blue-50/60 via-slate-50/60 to-white flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
-                        <div className="space-y-1">
-                          <div className="text-[11px] font-bold text-blue-800 uppercase tracking-wider flex items-center gap-1.5">
-                            <Clock className="w-3.5 h-3.5 text-blue-600" />
-                            Current Milestone of the Contractor
-                          </div>
-                          <div className="flex items-center gap-2 flex-wrap">
-                            <span className="font-bold text-slate-900 text-sm sm:text-base">
-                              {currentMilestoneLabel}
-                            </span>
-                            <span className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase ${isDisputed ? 'bg-amber-100 text-amber-800 border border-amber-200' :
-                              isProofSubmitted ? 'bg-indigo-100 text-indigo-800' :
-                                currentMilestoneStatus === 'in_progress' ? 'bg-blue-100 text-blue-800' :
-                                  currentMilestoneStatus === 'paid' ? 'bg-emerald-100 text-emerald-800' :
-                                    'bg-slate-100 text-slate-600'
-                              }`}>
-                              {removeUnderscore(currentMilestoneStatus)}
-                            </span>
-                          </div>
-                          <p className="text-xs text-slate-500">
-                            {isProofSubmitted
-                              ? 'Contractor has submitted completion proof. Awaiting your inspection and release.'
-                              : isDisputed
-                                ? 'Escrow is temporarily contested pending dispute rectification.'
-                                : 'Contractor is actively executing construction work for this milestone stage.'}
-                          </p>
-                        </div>
-
-                        {/* The Two Required Buttons: Pay & Inspect Milestone */}
-                        <div className="flex items-center gap-2.5 w-full md:w-auto">
-                          {/* 1. Pay Button */}
-                          <Link
-                            href={`/homeowner/projects/${p.id}?tab=milestones&action=pay`}
-                            className="flex-1 md:flex-initial px-4 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold shadow-xs flex items-center justify-center gap-1.5 transition-colors"
-                          >
-                            <CreditCard className="w-4 h-4" />
-                            <span>Pay</span>
-                          </Link>
-
-                          {/* 2. Inspect Milestone Button */}
-                          <Link
-                            href={`/homeowner/projects/${p.id}?tab=milestones`}
-                            className="flex-1 md:flex-initial px-4 py-2.5 rounded-xl bg-white border border-slate-200 hover:bg-slate-50 text-slate-800 text-xs font-bold shadow-2xs flex items-center justify-center gap-1.5 transition-colors"
-                          >
-                            <Eye className="w-4 h-4 text-slate-500" />
-                            <span>Inspect Milestone</span>
-                          </Link>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                );
-              }
-
-              // Project Planning Card
-              if (
-                ['awarded', 'project_planning', 'in_progress', 'disputed', 'completed'].includes(p.status) &&
-                p.milestones.length === 0
-              ) {
-                return (
-                  <div
-                    key={p.id}
-                    className="bg-white rounded-2xl border border-indigo-200/90 shadow-xs hover:shadow-md transition-all p-6 flex flex-col md:flex-row justify-between items-start md:items-center gap-4 bg-gradient-to-r from-white via-indigo-50/20 to-blue-50/20"
-                  >
-                    <div className="space-y-1.5">
-                      <div className="flex items-center gap-2.5 flex-wrap">
-                        <h2 className="font-bold text-slate-900 text-base">{p.title}</h2>
-                        <span className="px-2.5 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider bg-indigo-100 text-indigo-800 border border-indigo-200">
-                          Planning
-                        </span>
-                      </div>
-                      <div className="flex items-center gap-2 text-xs text-slate-600 flex-wrap">
-                        <span className="flex items-center gap-1 font-semibold text-indigo-700">
-                          <HardHat className="w-3.5 h-3.5" />
-                          Builder: <strong className="text-slate-900 ml-0.5">{p.contractor ? p.contractor.business_name : 'Assigned Contractor'}</strong>
-                        </span>
-                        <span>•</span>
-                        <MapPin className="w-3.5 h-3.5 text-slate-400" />
-                        <span>{p.city}{p.province ? `, ${p.province}` : ''}</span>
-                      </div>
-                    </div>
-
-                    <div className="flex items-center gap-2 w-full md:w-auto">
-                      <Link
-                        href={`/homeowner/projects/${p.id}`}
-                        className="w-full md:w-auto px-5 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold shadow-xs flex items-center justify-center gap-1.5 transition-colors"
-                      >
-                        <Clock className="w-4 h-4" />
-                        <span>View Project</span>
-                      </Link>
-                    </div>
-                  </div>
-                );
-              }
-
-              // Open / Draft / Quoted Projects Card
-              const canDeleteProject = ['open', 'draft', 'quoted'].includes(p.status) && !p.awarded_quote_id;
-
-              return (
-                <div
-                  key={p.id}
-                  className="bg-white rounded-2xl border border-slate-200 shadow-xs hover:shadow-md transition-all p-6 flex flex-col md:flex-row justify-between items-start md:items-center gap-4"
-                >
-                  <div className="space-y-1">
-                    <div className="flex items-center gap-2.5 flex-wrap">
-                      <h2 className="font-bold text-slate-900 text-base">{p.title}</h2>
-                      <span className="px-2.5 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider bg-amber-100 text-amber-800">
-                        {p.proposalQuotes?.length || p.status === 'quoted' ? 'Quotes Received' : removeUnderscore(p.status)}
-                      </span>
-                    </div>
-                    <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-slate-500">
-                      <MapPin className="w-3.5 h-3.5 text-slate-400" />
-                      <span>{p.city}{p.province ? `, ${p.province}` : ''}</span>
-                      {p.contractor?.business_name && (
-                        <span className="flex items-center gap-1">
-                          <HardHat className="w-3.5 h-3.5 text-blue-600" />
-                          Builder: <strong className="text-slate-800">{p.contractor.business_name}</strong>
-                        </span>
-                      )}
-                      {p.proposalQuotes?.length > 0 && (
-                        <span className="font-semibold text-emerald-700">
-                          {p.proposalQuotes.length} contractor {p.proposalQuotes.length === 1 ? 'quote' : 'quotes'} received
-                        </span>
-                      )}
-                    </div>
-                  </div>
-
-                  <div className="flex items-center gap-2 w-full md:w-auto">
-                    {canDeleteProject && (
-                      <button
-                        type="button"
-                        onClick={() => setProjectToDelete(p)}
-                        className="px-3.5 py-2.5 rounded-xl border border-red-200 hover:bg-red-50 text-red-600 font-bold text-xs shadow-2xs flex items-center justify-center gap-1.5 transition-colors cursor-pointer"
-                        title="Delete project"
-                      >
-                        <Trash2 className="w-4 h-4 text-red-500" />
-                        <span>Delete</span>
-                      </button>
-                    )}
-
-                    <Link
-                      href={`/homeowner/projects/${p.id}`}
-                      className="w-full md:w-auto px-4 py-2.5 rounded-xl bg-[#136F48] hover:bg-[#0f5738] text-white text-xs font-bold shadow-xs flex items-center justify-center gap-1.5 transition-colors"
-                    >
-                      <FileText className="w-4 h-4" />
-                      <span>Manage</span>
-                    </Link>
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-        )}
-
-        {!loading && (
-          <div className="flex flex-col sm:flex-row items-center justify-between gap-3 rounded-xl border border-slate-200 bg-white px-4 py-3">
-            <p className="text-xs text-slate-500" aria-live="polite">
-              {totalCount === 0
-                ? 'Showing 0 of 0 projects'
-                : `Showing ${page * PROJECTS_PAGE_SIZE + 1}–${Math.min((page + 1) * PROJECTS_PAGE_SIZE, totalCount)} of ${totalCount} projects`}
-            </p>
-            {totalCount > PROJECTS_PAGE_SIZE && (
-              <div className="flex items-center gap-2">
-                <button
-                  type="button"
-                  onClick={() => setPage(currentPage => Math.max(0, currentPage - 1))}
-                  disabled={page === 0 || loading}
-                  className="inline-flex items-center gap-1 rounded-lg border border-slate-200 px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
-                >
-                  <ChevronLeft className="h-4 w-4" />
-                  Previous
-                </button>
-                <span className="px-2 text-xs text-slate-500">
-                  Page {page + 1} of {Math.ceil(totalCount / PROJECTS_PAGE_SIZE)}
-                </span>
-                <button
-                  type="button"
-                  onClick={() => setPage(currentPage => currentPage + 1)}
-                  disabled={loading || (page + 1) * PROJECTS_PAGE_SIZE >= totalCount}
-                  className="inline-flex items-center gap-1 rounded-lg border border-slate-200 px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
-                >
-                  Next
-                  <ChevronRight className="h-4 w-4" />
-                </button>
-              </div>
-            )}
-          </div>
-        )}
-
-        {/* Delete Confirmation Modal */}
-        {projectToDelete && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 p-4 backdrop-blur-xs">
-            <div className="bg-white rounded-2xl max-w-md w-full shadow-2xl border border-slate-200 p-6 space-y-4 animate-in fade-in zoom-in-95 duration-150">
-              <div className="flex items-center justify-between pb-3 border-b border-slate-100">
-                <div className="flex items-center gap-2.5 text-red-600 font-bold text-base">
-                  <div className="w-8 h-8 rounded-full bg-red-100 flex items-center justify-center">
-                    <Trash2 className="w-4 h-4 text-red-600" />
-                  </div>
-                  <span>Delete Project</span>
-                </div>
-                <button
-                  type="button"
-                  onClick={() => setProjectToDelete(null)}
-                  className="text-slate-400 hover:text-slate-600 p-1 rounded-lg"
-                >
-                  <X className="w-4 h-4" />
-                </button>
-              </div>
-
-              <div className="space-y-2 text-xs text-slate-600 leading-relaxed">
-                <p>
-                  Are you sure you want to permanently delete <strong className="text-slate-900">"{projectToDelete.title}"</strong>?
-                </p>
-                <p className="text-slate-500">
-                  This project has not been awarded yet. Deleting it will cancel all open contractor bids and remove its estimation records. This action cannot be undone.
-                </p>
-              </div>
-
-              <div className="pt-2 border-t border-slate-100 flex items-center justify-end gap-2 text-xs">
-                <button
-                  type="button"
-                  onClick={() => setProjectToDelete(null)}
-                  className="px-4 py-2.5 rounded-xl border border-slate-200 text-slate-700 font-bold hover:bg-slate-50 transition"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="button"
-                  disabled={isDeleting}
-                  onClick={handleConfirmDelete}
-                  className="px-5 py-2.5 rounded-xl bg-red-600 hover:bg-red-700 disabled:opacity-50 text-white font-bold transition shadow-xs flex items-center gap-1.5"
-                >
-                  <Trash2 className="w-3.5 h-3.5" />
-                  <span>{isDeleting ? 'Deleting...' : 'Delete Project'}</span>
-                </button>
-              </div>
-            </div>
-          </div>
-        )}
-      </div>
-    </AppLayout>
-  );
+  return <ProjectsDashboard
+    loading={loading}
+    loadError={loadError}
+    projects={projects}
+    filter={filter}
+    setFilter={setFilter}
+    categoryCounts={categoryCounts}
+    search={search}
+    setSearch={setSearch}
+    page={page}
+    setPage={setPage}
+    totalCount={totalCount}
+    isPending={isPending}
+    startTransition={startTransition}
+    projectToDelete={projectToDelete}
+    setProjectToDeleteClosed={setProjectToDelete}
+    handleConfirmDelete={handleConfirmDelete}
+    isDeleting={isDeleting}
+  />;
 }

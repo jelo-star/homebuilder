@@ -73,7 +73,7 @@ export default function ContractorCostBreakdownModal({ project, existingQuote, i
     if (!enteredMaterials.every(item => item.name.trim() && required(item.quantity) && parseNumberInput(item.quantity) > 0 && required(item.unitPrice))) return 'Complete each material row you started, or clear it.';
     if (!enteredLabor.every(item => item.position.trim() && required(item.workers) && parseNumberInput(item.workers) > 0 && required(item.dailyRate) && required(item.days) && parseNumberInput(item.days) > 0)) return 'Complete each labor row you started, or clear it.';
     if (!enteredEquipment.every(item => item.name.trim() && required(item.quantity) && parseNumberInput(item.quantity) > 0 && required(item.rate) && required(item.duration) && parseNumberInput(item.duration) > 0)) return 'Complete each machinery row you started, or clear it.';
-    if (!enteredOverhead.every(item => item.name.trim() && item.description.trim() && required(item.amount))) return 'Complete each other-cost row you started, or clear it.';
+    if (!enteredOverhead.every(item => item.name.trim() && required(item.amount))) return 'Complete each other-cost row you started, or clear it.';
     if ([profit, contingency, taxes].some(value => value && !required(value))) return 'Enter valid amounts for profit, contingency, and taxes.';
     if (!declaration) return 'Accept the contractor declaration before submitting.';
     if (totalAmount <= 0) return 'The calculated proposal total must be greater than ₱0.';

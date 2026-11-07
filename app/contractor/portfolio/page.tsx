@@ -12,14 +12,12 @@ import {
   AlertCircle, 
   Calendar, 
   Sparkles,
-  MapPin,
   X,
-  Eye,
-  Layers
+  Pencil
 } from 'lucide-react';
 import { createClient } from '@/lib/supabase/client';
+import { resolvePortfolioImageUrl } from '@/lib/supabase/storage';
 import { PortfolioItem, HouseType } from '@/types/database';
-import { formatCurrency, capitalize } from '@/lib/utils/formatters';
 
 export default function ContractorPortfolioPage() {
   return (
@@ -34,6 +32,7 @@ function ContractorPortfolioContent() {
   const [loadError, setLoadError] = React.useState('');
   const [portfolioItems, setPortfolioItems] = React.useState<PortfolioItem[]>([]);
   const [showAddModal, setShowAddModal] = React.useState(false);
+  const [editingItemId, setEditingItemId] = React.useState<string | null>(null);
 
   // Portfolio Modal Form State
   const [title, setTitle] = React.useState('');
@@ -48,6 +47,44 @@ function ContractorPortfolioContent() {
   const [saving, setSaving] = React.useState(false);
   const [errorMsg, setErrorMsg] = React.useState('');
   const [successMsg, setSuccessMsg] = React.useState('');
+  const portfolioImageUrls = React.useMemo(() => {
+    return new Map(
+      portfolioItems.flatMap(item => {
+        const filePath = item.portfolio_images?.[0]?.file_path;
+        return filePath ? [[item.id, resolvePortfolioImageUrl(filePath)] as const] : [];
+      }),
+    );
+  }, [portfolioItems]);
+
+  const resetForm = () => {
+    setTitle('');
+    setDescription('');
+    setHouseType('');
+    setFloors('');
+    setFloorArea('');
+    setYearCompleted('');
+    setImageUrl('');
+    setImageFile(null);
+    setEditingItemId(null);
+  };
+
+  const openAddModal = () => {
+    resetForm();
+    setShowAddModal(true);
+  };
+
+  const openEditModal = (item: PortfolioItem) => {
+    setEditingItemId(item.id);
+    setTitle(item.title);
+    setDescription(item.description || '');
+    setHouseType(item.house_type || '');
+    setFloors(item.floors?.toString() || '');
+    setFloorArea(item.floor_area_sqm?.toString() || '');
+    setYearCompleted(item.year_completed?.toString() || '');
+    setImageUrl(item.portfolio_images?.[0]?.file_path || '');
+    setImageFile(null);
+    setShowAddModal(true);
+  };
 
   const loadData = React.useCallback(async () => {
     const supabase = createClient();
@@ -92,7 +129,7 @@ function ContractorPortfolioContent() {
     return () => clearTimeout(timer);
   }, [successMsg, errorMsg]);
 
-  const handleCreatePortfolioItem = async (e: React.FormEvent) => {
+  const handleSavePortfolioItem = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!title.trim()) {
       setErrorMsg('Project title is required.');
@@ -106,7 +143,7 @@ function ContractorPortfolioContent() {
     try {
       const supabase = createClient();
       const { data: { user } } = await supabase.auth.getUser();
-      if (!user) throw new Error('Sign in to add a portfolio project.');
+      if (!user) throw new Error('Sign in to manage your portfolio.');
 
       // Resolve image path from the uploaded file or an explicitly provided URL.
       let finalImagePath = imageUrl.trim();
@@ -121,41 +158,55 @@ function ContractorPortfolioContent() {
         finalImagePath = publicUrl;
       }
 
-      const { data: item, error: itemErr } = await supabase
-            .from('portfolio_items')
-            .insert({
-              contractor_id: user.id,
-              title: title.trim(),
-              description: description.trim() || null,
-              house_type: houseType || null,
-              floors: Number(floors) || null,
-              floor_area_sqm: Number(floorArea) || null,
-              year_completed: Number(yearCompleted) || null,
-            })
-            .select()
-            .single();
-      if (itemErr) throw itemErr;
-      if (!item) throw new Error('Portfolio project could not be saved.');
-      if (finalImagePath) {
+      const values = {
+        title: title.trim(),
+        description: description.trim() || null,
+        house_type: houseType || null,
+        floors: Number(floors) || null,
+        floor_area_sqm: Number(floorArea) || null,
+        year_completed: Number(yearCompleted) || null,
+      };
+
+      let itemId = editingItemId;
+      if (editingItemId) {
+        const { error: itemErr } = await supabase
+          .from('portfolio_items')
+          .update(values)
+          .eq('id', editingItemId)
+          .eq('contractor_id', user.id);
+        if (itemErr) throw itemErr;
+        if (imageFile) {
+          const { error: deleteImageErr } = await supabase.from('portfolio_images').delete().eq('portfolio_item_id', editingItemId);
+          if (deleteImageErr) throw deleteImageErr;
+        }
+      } else {
+        const { data: item, error: itemErr } = await supabase
+          .from('portfolio_items')
+          .insert({ contractor_id: user.id, ...values })
+          .select()
+          .single();
+        if (itemErr) throw itemErr;
+        if (!item) throw new Error('Portfolio project could not be saved.');
+        itemId = item.id;
+      }
+
+      if (imageFile && finalImagePath && itemId) {
         const { error: imageErr } = await supabase.from('portfolio_images').insert({
-          portfolio_item_id: item.id,
+          portfolio_item_id: itemId,
           file_path: finalImagePath,
           sort_order: 1,
         });
         if (imageErr) throw imageErr;
       }
 
-      setSuccessMsg(`"${title}" added to your verified project portfolio!`);
+      setSuccessMsg(`"${title}" ${editingItemId ? 'updated' : 'added'} in your verified project portfolio!`);
       setShowAddModal(false);
-      setTitle('');
-      setDescription('');
-      setImageUrl('');
-      setImageFile(null);
+      resetForm();
       await loadData();
     } catch (err: unknown) {
       const message = err instanceof Error && err.message.toLowerCase().includes('bucket not found')
         ? 'Portfolio image storage is not set up in Supabase. Apply migration 34_repair_portfolio_storage_bucket.sql, then try again.'
-        : err instanceof Error ? err.message : 'Failed to add project';
+        : err instanceof Error ? err.message : 'Failed to save project';
       setErrorMsg(message);
     } finally {
       setSaving(false);
@@ -221,29 +272,46 @@ function ContractorPortfolioContent() {
           </div>
         )}
 
-        {/* Top Header Card */}
-        <div className="bg-white p-6 sm:p-7 rounded-2xl border border-slate-200 shadow-xs flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
-          <div>
-            <h1 className="text-lg font-bold text-slate-900">Verified Completed Builds</h1>
-            <p className="text-xs text-slate-500 mt-0.5">
-              Homeowners can inspect your past builds when reviewing quotes. Add accurate project details and photos to showcase your work.
+        <section
+          className="relative overflow-hidden rounded-3xl bg-[#083b72] px-6 py-8 text-white shadow-sm sm:px-9"
+          style={{
+            backgroundImage: 'linear-gradient(90deg, rgba(4,38,81,.96), rgba(7,62,121,.7), rgba(7,62,121,.12)), url("https://images.unsplash.com/photo-1600607687939-ce8a6c25118c?auto=format&fit=crop&w=1600&q=85")',
+            backgroundPosition: 'center',
+            backgroundSize: 'cover',
+          }}
+        >
+          <div className="relative max-w-2xl">
+            <div className="mb-2 flex items-center gap-2 text-sm font-medium text-blue-100">
+              <Sparkles className="h-4 w-4" />
+              Showcase your craftsmanship
+            </div>
+            <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">Your completed work, presented professionally.</h1>
+            <p className="mt-2 max-w-xl text-sm text-blue-100">
+              Help homeowners see the quality of your builds when they review your contractor profile and proposals.
             </p>
+            <button
+              type="button"
+              onClick={openAddModal}
+              className="mt-6 inline-flex items-center gap-2 rounded-xl bg-white px-4 py-2.5 text-sm font-bold text-blue-700 hover:bg-blue-50"
+            >
+              <Plus className="h-4 w-4" />
+              Add Successful Project
+            </button>
           </div>
+        </section>
 
-          <button
-            type="button"
-            onClick={() => setShowAddModal(true)}
-            className="py-2.5 px-5 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs shadow-xs transition-all hover:shadow flex items-center gap-1.5 shrink-0"
-          >
-            <Plus className="w-4 h-4" />
-            <span>Add Successful Project</span>
-          </button>
+        <div className="flex flex-col gap-1 px-1 sm:flex-row sm:items-end sm:justify-between">
+          <div>
+            <h2 className="text-lg font-bold text-slate-900">Verified Completed Builds</h2>
+            <p className="mt-1 text-xs text-slate-500">Homeowners can inspect your past builds when reviewing quotes.</p>
+          </div>
+          <span className="text-xs font-semibold text-slate-400">{portfolioItems.length} showcase {portfolioItems.length === 1 ? 'project' : 'projects'}</span>
         </div>
 
         {/* Portfolio Grid */}
         {loading ? (
-          <div className="p-16 text-center text-xs text-slate-500 bg-white rounded-2xl border border-slate-200">
-            Loading your portfolio projects...
+          <div className="grid grid-cols-1 gap-6 md:grid-cols-2 lg:grid-cols-3">
+            {[1, 2, 3].map((item) => <div key={item} className="h-80 animate-pulse rounded-2xl border border-slate-200 bg-white" />)}
           </div>
         ) : loadError ? (
           <div className="p-12 text-center text-xs text-red-600 bg-white rounded-2xl border border-red-200">{loadError}</div>
@@ -257,7 +325,7 @@ function ContractorPortfolioContent() {
             <div className="pt-2">
               <button
                 type="button"
-                onClick={() => setShowAddModal(true)}
+                onClick={openAddModal}
                 className="py-2.5 px-6 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs shadow-xs"
               >
                 + Add Your First Project
@@ -267,16 +335,16 @@ function ContractorPortfolioContent() {
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
             {portfolioItems.map((item) => {
-              const primaryImg = item.portfolio_images?.[0]?.file_path;
+              const primaryImg = portfolioImageUrls.get(item.id);
 
               return (
                 <div
                   key={item.id}
-                  className="bg-white rounded-2xl border border-slate-200 shadow-xs hover:shadow-md transition-all overflow-hidden flex flex-col justify-between"
+                  className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-xs transition-all hover:-translate-y-0.5 hover:shadow-md flex flex-col justify-between"
                 >
                   <div>
                     {/* Project Image */}
-                    <div className="h-48 w-full bg-slate-100 relative overflow-hidden flex items-center justify-center">
+                    <div className="relative h-48 w-full overflow-hidden bg-slate-100 flex items-center justify-center">
                       {primaryImg ? (
                         <img
                           src={primaryImg}
@@ -292,16 +360,16 @@ function ContractorPortfolioContent() {
                           <div className="text-[11px]">Completed Build</div>
                         </div>
                       )}
-                      <span className="absolute top-3 right-3 px-2 py-0.5 rounded-full text-[10px] font-bold bg-white/90 text-slate-800 backdrop-blur-xs shadow-xs uppercase">
+                      <span className="absolute right-3 top-3 rounded-full bg-white/90 px-2.5 py-1 text-[10px] font-bold uppercase text-slate-800 shadow-xs backdrop-blur-xs">
                         {item.house_type ? item.house_type.replace('_', ' ') : 'Residential'}
                       </span>
                     </div>
 
                     {/* Details */}
-                    <div className="p-5 space-y-3">
+                    <div className="space-y-3 p-5">
                       <div>
                         <h3 className="font-bold text-slate-900 text-base">{item.title}</h3>
-                        <div className="text-xs text-slate-400 flex items-center gap-1.5 mt-0.5">
+                        <div className="mt-1 flex items-center gap-1.5 text-xs text-slate-400">
                           <Calendar className="w-3.5 h-3.5 text-slate-400" />
                           <span>{item.year_completed ? `Completed in ${item.year_completed}` : 'Completion year not provided'}</span>
                         </div>
@@ -313,7 +381,7 @@ function ContractorPortfolioContent() {
                         </p>
                       )}
 
-                      <div className="grid grid-cols-2 gap-2 text-xs py-2 border-t border-slate-100 text-slate-600">
+                      <div className="grid grid-cols-2 gap-2 border-t border-slate-100 py-2 text-xs text-slate-600">
                         {item.floor_area_sqm && (
                           <div>
                             <span className="text-slate-400">Area:</span> <strong className="text-slate-900">{item.floor_area_sqm} sq.m</strong>
@@ -328,7 +396,7 @@ function ContractorPortfolioContent() {
                     </div>
                   </div>
 
-                  <div className="p-4 bg-slate-50 border-t border-slate-100 flex justify-between items-center text-xs">
+                  <div className="flex items-center justify-between border-t border-slate-100 bg-slate-50 p-4 text-xs">
                     <span className="text-emerald-700 font-semibold flex items-center gap-1">
                       <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
                       Verified Showcase
@@ -336,8 +404,16 @@ function ContractorPortfolioContent() {
 
                     <button
                       type="button"
+                      onClick={() => openEditModal(item)}
+                      className="rounded-lg p-1 text-slate-400 transition-colors hover:text-blue-600"
+                      title="Edit portfolio project"
+                    >
+                      <Pencil className="h-4 w-4" />
+                    </button>
+                    <button
+                      type="button"
                       onClick={() => handleDeleteItem(item.id, item.title)}
-                      className="text-slate-400 hover:text-rose-600 p-1 rounded-lg transition-colors"
+                      className="rounded-lg p-1 text-slate-400 transition-colors hover:text-rose-600"
                       title="Remove from portfolio"
                     >
                       <Trash2 className="w-4 h-4" />
@@ -355,19 +431,19 @@ function ContractorPortfolioContent() {
             <div className="bg-white rounded-2xl max-w-xl w-full p-6 sm:p-7 shadow-2xl border border-slate-200 space-y-5 animate-in fade-in zoom-in-95 duration-200">
               <div className="flex justify-between items-start border-b border-slate-100 pb-3">
                 <div>
-                  <h3 className="font-bold text-slate-900 text-base">Add Successful Project to Portfolio</h3>
-                  <p className="text-xs text-slate-500">Showcase past construction works to prospective homeowners</p>
+                  <h3 className="font-bold text-slate-900 text-base">{editingItemId ? 'Edit Portfolio Project' : 'Add Successful Project to Portfolio'}</h3>
+                  <p className="text-xs text-slate-500">{editingItemId ? 'Update the details homeowners see in your portfolio' : 'Showcase past construction works to prospective homeowners'}</p>
                 </div>
                 <button
                   type="button"
-                  onClick={() => setShowAddModal(false)}
+                  onClick={() => { setShowAddModal(false); resetForm(); }}
                   className="p-1 rounded-lg text-slate-400 hover:text-slate-600 hover:bg-slate-100"
                 >
                   <X className="w-5 h-5" />
                 </button>
               </div>
 
-              <form onSubmit={handleCreatePortfolioItem} className="space-y-4">
+              <form onSubmit={handleSavePortfolioItem} className="space-y-4">
                 <div>
                   <label className="block text-xs font-bold text-slate-900 mb-1">
                     Project Title <span className="text-red-500">*</span>
@@ -489,7 +565,7 @@ function ContractorPortfolioContent() {
                     disabled={saving || !title.trim()}
                     className="py-2.5 px-6 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-bold shadow-sm transition-all hover:shadow disabled:opacity-50"
                   >
-                    {saving ? 'Saving Project...' : 'Publish to Portfolio'}
+                    {saving ? 'Saving Project...' : editingItemId ? 'Save Changes' : 'Publish to Portfolio'}
                   </button>
                 </div>
               </form>

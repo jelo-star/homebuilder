@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { useParams, useSearchParams } from 'next/navigation';
 import Navbar from '@/components/ui/Navbar';
 import { createClient } from '@/lib/supabase/client';
+import { resolvePortfolioImageUrl } from '@/lib/supabase/storage';
 import {
   ArrowLeft,
   Award,
@@ -471,7 +472,7 @@ function ContractorPublicProfileContent() {
                   <article key={item.id} className="rounded-2xl border border-slate-200 bg-white p-5">
                     {item.portfolio_images?.[0]?.file_path && (
                       <img
-                        src={item.portfolio_images[0].file_path}
+                        src={resolvePortfolioImageUrl(item.portfolio_images[0].file_path)}
                         alt={`${item.title} portfolio project`}
                         className="mb-4 aspect-video w-full rounded-xl object-cover"
                       />

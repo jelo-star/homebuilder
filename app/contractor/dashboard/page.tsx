@@ -8,6 +8,7 @@ import {
   ChevronRight,
   Building2,
   HardHat,
+  Sparkles,
 } from 'lucide-react';
 import { createClient } from '@/lib/supabase/client';
 import { ContractorProfile, MilestoneStatus, Project, Quote, Profile } from '@/types/database';
@@ -57,6 +58,8 @@ function getErrorMessage(error: unknown): string {
 
 export default function ContractorDashboard() {
   const [loadError, setLoadError] = React.useState('');
+  const [loading, setLoading] = React.useState(true);
+  const [unreadCount, setUnreadCount] = React.useState(0);
   const [contractor, setContractor] = React.useState<ContractorProfile | null>(null);
   const [activeProjects, setActiveProjects] = React.useState<EnrichedActiveProject[]>([]);
   const [, setUnawardedProjects] = React.useState<EnrichedUnawardedProject[]>([]);
@@ -69,10 +72,21 @@ export default function ContractorDashboard() {
 
   React.useEffect(() => {
     async function loadData() {
+      setLoading(true);
+      setLoadError('');
       try {
       const supabase = createClient();
       const { data: { user }, error: authError } = await supabase.auth.getUser();
       if (authError) throw authError;
+      if (!user) throw new Error('Your session has expired. Please sign in again.');
+
+      const { count: unreadNotifications, error: unreadNotificationsError } = await supabase
+        .from('notifications')
+        .select('id', { count: 'exact', head: true })
+        .eq('user_id', user.id)
+        .is('read_at', null);
+      if (unreadNotificationsError) throw unreadNotificationsError;
+      setUnreadCount(unreadNotifications || 0);
 
       // 1. Fetch Contractor Profile
       let currentCont: ContractorProfile | null = null;
@@ -214,6 +228,7 @@ export default function ContractorDashboard() {
       } catch (error) {
         setLoadError(getErrorMessage(error));
       } finally {
+        setLoading(false);
       }
     }
 
@@ -224,12 +239,31 @@ export default function ContractorDashboard() {
     <AppLayout
       userRole="contractor"
       userName={contractor?.business_name || 'Contractor'}
+      unreadCount={unreadCount}
       title="Contractor Dashboard"
-      subtitle="Manage active construction contracts and review available projects"
+      subtitle="Manage your active projects and review available opportunities."
       showBackButton={false}
     >
       <div className="w-full space-y-8 pb-12">
         {loadError && <div className="p-3 rounded-xl bg-red-50 border border-red-200 text-red-700 text-xs">{loadError}</div>}
+        <section
+          className="relative overflow-hidden rounded-3xl bg-[#083b72] px-6 py-8 text-white shadow-sm sm:px-9"
+          style={{
+            backgroundImage: 'linear-gradient(90deg, rgba(4,38,81,.96), rgba(7,62,121,.72), rgba(7,62,121,.12)), url("https://images.unsplash.com/photo-1503387762-592deb58ef4e?auto=format&fit=crop&w=1600&q=85")',
+            backgroundPosition: 'center',
+            backgroundSize: 'cover',
+          }}
+        >
+          <div className="relative max-w-xl">
+            <div className="mb-2 flex items-center gap-2 text-sm font-medium text-blue-100"><Sparkles className="h-4 w-4" /> Your contractor workspace</div>
+            <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">Build with confidence, {contractor?.business_name || 'Contractor'}.</h1>
+            <p className="mt-2 text-sm text-blue-100">Stay on top of awarded projects and discover your next opportunity.</p>
+            <div className="mt-6 flex flex-wrap gap-3">
+              <Link href="/contractor/opportunities" className="inline-flex items-center gap-2 rounded-xl bg-white px-4 py-2.5 text-sm font-bold text-blue-700 hover:bg-blue-50">Browse Opportunities <ChevronRight className="h-4 w-4" /></Link>
+              <Link href="/contractor/projects" className="inline-flex items-center gap-2 rounded-xl border border-white/40 px-4 py-2.5 text-sm font-bold text-white hover:bg-white/10">My Projects</Link>
+            </div>
+          </div>
+        </section>
         {/* Status Summary Cards */}
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
           <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-xs">
@@ -237,7 +271,7 @@ export default function ContractorDashboard() {
               <span>Active Projects</span>
               <HardHat className="w-4 h-4 text-[#136F48]" />
             </div>
-            <div className="text-2xl font-bold text-slate-900 mt-2">{stats.activeCount}</div>
+            <div className="text-2xl font-bold text-slate-900 mt-2">{loading ? '—' : stats.activeCount}</div>
             <div className="text-xs text-slate-400 mt-1">Awarded & in execution</div>
           </div>
 
@@ -246,7 +280,7 @@ export default function ContractorDashboard() {
               <span>Available Projects</span>
               <Building2 className="w-4 h-4 text-blue-600" />
             </div>
-            <div className="text-2xl font-bold text-slate-900 mt-2">{stats.opportunitiesCount}</div>
+            <div className="text-2xl font-bold text-slate-900 mt-2">{loading ? '—' : stats.opportunitiesCount}</div>
             <div className="text-xs text-slate-400 mt-1">Open to quotes</div>
           </div>
 
@@ -255,7 +289,7 @@ export default function ContractorDashboard() {
               <span>Quotes Under Review</span>
               <FileText className="w-4 h-4 text-amber-500" />
             </div>
-            <div className="text-2xl font-bold text-slate-900 mt-2">{stats.submittedQuotesCount}</div>
+            <div className="text-2xl font-bold text-slate-900 mt-2">{loading ? '—' : stats.submittedQuotesCount}</div>
             <div className="text-xs text-slate-400 mt-1">Pending homeowner decision</div>
           </div>
         </div>
@@ -279,7 +313,11 @@ export default function ContractorDashboard() {
             </span>
           </div>
 
-          {activeProjects.length === 0 ? (
+          {loading ? (
+            <div className="grid grid-cols-1 gap-5 md:grid-cols-2 lg:grid-cols-3">
+              {[1, 2, 3].map(item => <div key={item} className="h-64 animate-pulse rounded-2xl border border-slate-200 bg-white" />)}
+            </div>
+          ) : activeProjects.length === 0 ? (
             <div className="bg-white rounded-2xl border border-dashed border-slate-300 p-12 text-center">
               <HardHat className="w-10 h-10 text-slate-300 mx-auto mb-3" />
               <h3 className="text-sm font-bold text-slate-800">No active awarded projects</h3>

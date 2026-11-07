@@ -4,29 +4,25 @@ import React from 'react';
 import Link from 'next/link';
 import AppLayout from '@/components/ui/AppLayout';
 import { 
-  Building2, 
   MapPin, 
-  Calendar, 
-  DollarSign, 
-  CheckCircle2, 
-  AlertCircle, 
   Clock, 
   HardHat,
   Search,
   ChevronRight,
-  ShieldCheck,
   Camera
 } from 'lucide-react';
 import { createClient } from '@/lib/supabase/client';
 import { Project, Quote } from '@/types/database';
-import { formatCurrency, formatDate, capitalize } from '@/lib/utils/formatters';
+import { formatCurrency, formatDate } from '@/lib/utils/formatters';
+
+type ProjectStatusFilter = 'all' | 'project_planning' | 'in_progress' | 'completed' | 'disputed';
 
 export default function ContractorProjectsPage() {
   const [loading, setLoading] = React.useState(true);
   const [loadError, setLoadError] = React.useState('');
   const [userName, setUserName] = React.useState<string | null>(null);
   const [projects, setProjects] = React.useState<(Project & { awarded_quote?: Quote })[]>([]);
-  const [statusFilter, setStatusFilter] = React.useState<'all' | 'project_planning' | 'in_progress' | 'completed' | 'disputed'>('all');
+  const [statusFilter, setStatusFilter] = React.useState<ProjectStatusFilter>('all');
   const [search, setSearch] = React.useState('');
 
   const loadData = React.useCallback(async () => {
@@ -88,7 +84,7 @@ export default function ContractorProjectsPage() {
           enriched = projs.map(p => ({
             ...p,
             awarded_quote: quotes.find(q => q.id === p.awarded_quote_id || q.project_id === p.id),
-          })) as any;
+          }));
         }
       }
     }
@@ -98,7 +94,10 @@ export default function ContractorProjectsPage() {
   }, []);
 
   React.useEffect(() => {
-    loadData();
+    const timeoutId = window.setTimeout(() => {
+      void loadData();
+    }, 0);
+    return () => window.clearTimeout(timeoutId);
   }, [loadData]);
 
   const filteredProjects = React.useMemo(() => {
@@ -123,8 +122,8 @@ export default function ContractorProjectsPage() {
     >
       <div className="w-full space-y-6">
         {/* Filters and Search Bar */}
-        <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-4">
-          <div className="flex gap-2 flex-wrap">
+        <div className="flex flex-col gap-3 rounded-2xl border border-slate-200 bg-white p-3 shadow-xs sm:flex-row sm:items-center sm:justify-between">
+          <div className="flex gap-2 overflow-x-auto pb-1 sm:flex-wrap sm:pb-0">
             {[
               { key: 'all', label: 'All Contracts' },
               { key: 'project_planning', label: 'Project Planning' },
@@ -134,8 +133,8 @@ export default function ContractorProjectsPage() {
             ].map((tab) => (
               <button
                 key={tab.key}
-                onClick={() => setStatusFilter(tab.key as any)}
-                className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${
+                onClick={() => setStatusFilter(tab.key as ProjectStatusFilter)}
+                className={`whitespace-nowrap rounded-lg px-3 py-2 text-xs font-medium transition-colors ${
                   statusFilter === tab.key
                     ? 'bg-blue-600 text-white font-semibold shadow-xs'
                     : 'bg-white text-slate-600 hover:bg-slate-100 border border-slate-200'
@@ -147,14 +146,14 @@ export default function ContractorProjectsPage() {
           </div>
 
           <div className="flex items-center gap-3 w-full sm:w-auto">
-            <div className="relative flex-1 sm:w-64">
+            <div className="relative w-full sm:w-64">
               <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
               <input
                 type="text"
                 placeholder="Search by project name, city..."
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
-                className="w-full pl-9 pr-3 py-1.5 text-xs rounded-lg border border-slate-200 bg-white focus:outline-none focus:ring-2 focus:ring-blue-500/20"
+                className="w-full rounded-xl border border-slate-200 bg-slate-50 py-2 pl-9 pr-3 text-xs focus:outline-none focus:ring-2 focus:ring-blue-500/20"
               />
             </div>
           </div>
@@ -162,8 +161,8 @@ export default function ContractorProjectsPage() {
 
         {/* Project Cards Grid */}
         {loading ? (
-          <div className="p-16 text-center text-xs text-slate-500 bg-white rounded-2xl border border-slate-200">
-            Loading contracted projects...
+          <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
+            {[1, 2].map(item => <div key={item} className="h-72 animate-pulse rounded-2xl border border-slate-200 bg-white" />)}
           </div>
         ) : loadError ? (
           <div className="p-12 text-center text-xs text-red-600 bg-white rounded-2xl border border-red-200">{loadError}</div>
@@ -178,7 +177,7 @@ export default function ContractorProjectsPage() {
             {filteredProjects.map((p) => (
               <div
                 key={p.id}
-                className="bg-white rounded-2xl border border-slate-200 p-6 shadow-xs hover:shadow-md hover:border-blue-300 transition-all flex flex-col justify-between"
+                className="flex flex-col justify-between rounded-2xl border border-slate-200 bg-white p-6 shadow-xs transition-all hover:-translate-y-0.5 hover:border-blue-300 hover:shadow-md"
               >
                 <div className="space-y-4">
                   <div className="flex justify-between items-start gap-2">

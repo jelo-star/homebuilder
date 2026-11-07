@@ -40,6 +40,7 @@ import {
   Send
 } from 'lucide-react';
 import { createClient } from '@/lib/supabase/client';
+import { resolvePortfolioImageUrl } from '@/lib/supabase/storage';
 import { Project, Quote, Milestone, ContractorProfile, ConfiguredPaymentMethod, MilestoneProof, Dispute, ProjectPlan, ProjectPlanComment } from '@/types/database';
 import { formatCurrency, formatDate, formatNumberInput, parseNumberInput, capitalize, cleanMilestoneTitle, removeUnderscore } from '@/lib/utils/formatters';
 import { calculateEstimate } from '@/lib/utils/estimator';
@@ -537,7 +538,7 @@ function ProjectDetailsContent() {
         const firstImage = [...(item.portfolio_images || [])]
           .sort((left, right) => left.sort_order - right.sort_order)[0];
         if (firstImage?.file_path && !previews[item.contractor_id]) {
-          previews[item.contractor_id] = firstImage.file_path;
+          previews[item.contractor_id] = resolvePortfolioImageUrl(firstImage.file_path);
         }
       }
       setContractorPreviewImages(previous => ({ ...previous, ...previews }));
@@ -3592,7 +3593,7 @@ function ProjectDetailsContent() {
                     {item.portfolio_images && item.portfolio_images[0] && (
                       <div className="h-44 w-full bg-slate-100 overflow-hidden">
                         <img
-                          src={item.portfolio_images[0].file_path}
+                          src={resolvePortfolioImageUrl(item.portfolio_images[0].file_path)}
                           alt={item.title}
                           className="w-full h-full object-cover"
                           loading="lazy"

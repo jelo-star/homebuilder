@@ -104,12 +104,6 @@ export default function ContractorPaymentsPage() {
   const [proofLoadingId, setProofLoadingId] = React.useState<string | null>(null);
   const initialPageLoadComplete = React.useRef(false);
   const pageRequestId = React.useRef(0);
-  const [activeContractsTotal, setActiveContractsTotal] = React.useState(0);
-  const [submittedTotal, setSubmittedTotal] = React.useState(0);
-  const [verifiedTotal, setVerifiedTotal] = React.useState(0);
-  const [remainingBalance, setRemainingBalance] = React.useState(0);
-  const [awaitingReleaseTotal, setAwaitingReleaseTotal] = React.useState(0);
-  const [releasedTotal, setReleasedTotal] = React.useState(0);
   const [inspectingPayoutProof, setInspectingPayoutProof] = React.useState<{
     url: string;
     ref: string;
@@ -128,17 +122,12 @@ export default function ContractorPaymentsPage() {
       return;
     }
 
-    let acceptedQuotesTotal = 0;
-
     if (user) {
       setContractorId(user.id);
       const [
         { data: pData, error: payoutsError, count: payoutTotal },
         { data: lData, error: ledgerError, count: ledgerTotal },
         { data: txData, error: transactionsError, count: submissionTotal },
-        { data: qData, error: quotesError },
-        { data: txSummaryData, error: txSummaryError },
-        { data: payoutSummaryData, error: payoutSummaryError },
       ] = await Promise.all([
         supabase
           .from('payouts')
@@ -158,21 +147,8 @@ export default function ContractorPaymentsPage() {
           .eq('recipient_id', user.id)
           .range(0, PAGE_SIZE - 1)
           .order('created_at', { ascending: false }),
-        supabase
-          .from('quotes')
-          .select('price')
-          .eq('contractor_id', user.id)
-          .eq('status', 'accepted'),
-        supabase
-          .from('payment_transactions')
-          .select('amount_centavos, payment_status, payout_status, net_amount_centavos')
-          .eq('recipient_id', user.id),
-        supabase
-          .from('payouts')
-          .select('status, net_amount')
-          .eq('contractor_id', user.id),
       ]);
-      const queryError = payoutsError || ledgerError || transactionsError || quotesError || txSummaryError || payoutSummaryError;
+      const queryError = payoutsError || ledgerError || transactionsError;
       if (queryError) {
         setLoadError(queryError.message);
         setLoading(false);
@@ -195,27 +171,6 @@ export default function ContractorPaymentsPage() {
         return;
       }
 
-      const currentSubmissions = (txSummaryData || []) as PaymentTransactionRecord[];
-      if (qData) {
-        acceptedQuotesTotal = qData.reduce((sum, q) => sum + (Number(q.price) || 0), 0);
-      }
-
-      const submitted = currentSubmissions
-        .filter(tx => tx.payment_status !== 'REJECTED')
-        .reduce((acc, tx) => acc + (tx.amount_centavos || 0) / 100, 0);
-      const verified = currentSubmissions
-        .filter(tx => tx.payment_status === 'PAID' || tx.payment_status === 'SUCCEEDED')
-        .reduce((acc, tx) => acc + (tx.amount_centavos || 0) / 100, 0);
-      const releasedFromTx = currentSubmissions
-        .filter(tx => tx.payout_status === 'RELEASED' || tx.payout_status === 'PAID')
-        .reduce((acc, tx) => acc + ((tx.net_amount_centavos || tx.amount_centavos || 0) / 100), 0);
-      const releasedFromPayouts = (payoutSummaryData || [])
-        .filter(p => p.status === 'sent' || p.status === 'RELEASED')
-        .reduce((acc, p) => acc + (Number(p.net_amount) || 0), 0);
-      const released = Math.max(releasedFromTx, releasedFromPayouts);
-      const awaitingRelease = Math.max(0, verified - released);
-      const remaining = Math.max(0, acceptedQuotesTotal - verified);
-
       setPayouts((pData || []) as Payout[]);
       setLedgerEntries((lData || []) as EscrowLedger[]);
       setHomeownerSubmissions((txData || []) as PaymentTransactionRecord[]);
@@ -226,12 +181,6 @@ export default function ContractorPaymentsPage() {
       setPayoutPage(1);
       setLedgerPage(1);
       setSubmissionPage(1);
-      setActiveContractsTotal(acceptedQuotesTotal);
-      setSubmittedTotal(submitted);
-      setVerifiedTotal(verified);
-      setRemainingBalance(remaining);
-      setAwaitingReleaseTotal(awaitingRelease);
-      setReleasedTotal(released);
 
       const proofIdsResult = txData?.length
         ? await supabase
@@ -394,52 +343,13 @@ export default function ContractorPaymentsPage() {
   return (
     <AppLayout
       userRole="contractor"
-      title="Contractor Escrow & Financial History"
-      subtitle="Complete ledger of held project escrow, approved milestone releases, and bank payouts"
+      title="Project Payments & Financial History"
+      subtitle="Review homeowner payments, contractor payouts, and escrow activity grouped by project"
       backHref="/contractor/dashboard"
     >
       <div className="w-full space-y-6">
         {loadError && <div className="p-3 rounded-xl bg-red-50 border border-red-200 text-red-700 text-xs">{loadError}</div>}
         {proofError && <div role="alert" className="p-3 rounded-xl bg-red-50 border border-red-200 text-red-700 text-xs">{proofError}</div>}
-        {/* Financial KPI Cards — 6 Required Contractor Figures */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-          <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-xs">
-            <div className="text-xs text-slate-400 font-medium">Total Contract Amount</div>
-            <div className="text-2xl font-bold text-slate-900 mt-1">{formatCurrency(activeContractsTotal)}</div>
-            <div className="text-[11px] text-slate-400 mt-1">Total across awarded contracts</div>
-          </div>
-
-          <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-xs">
-            <div className="text-xs text-slate-400 font-medium">Payments Submitted by Homeowner</div>
-            <div className="text-2xl font-bold text-indigo-600 mt-1">{formatCurrency(submittedTotal)}</div>
-            <div className="text-[11px] text-slate-400 mt-1">Includes PAID & PENDING VERIFICATION</div>
-          </div>
-
-          <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-xs">
-            <div className="text-xs text-slate-400 font-medium">Verified Payments (PAID)</div>
-            <div className="text-2xl font-bold text-blue-600 mt-1">{formatCurrency(verifiedTotal)}</div>
-            <div className="text-[11px] text-slate-400 mt-1">Confirmed received by platform admin</div>
-          </div>
-
-          <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-xs">
-            <div className="text-xs text-slate-400 font-medium">Remaining Contract Balance</div>
-            <div className="text-2xl font-bold text-slate-800 mt-1">{formatCurrency(remainingBalance)}</div>
-            <div className="text-[11px] text-slate-400 mt-1">Unpaid / unverified contract balance</div>
-          </div>
-
-          <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-xs">
-            <div className="text-xs text-slate-400 font-medium">Funds Awaiting Release</div>
-            <div className="text-2xl font-bold text-amber-600 mt-1">{formatCurrency(awaitingReleaseTotal)}</div>
-            <div className="text-[11px] text-slate-400 mt-1">Verified funds held pending release</div>
-          </div>
-
-          <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-xs">
-            <div className="text-xs text-slate-400 font-medium">Funds Already Released (RELEASED)</div>
-            <div className="text-2xl font-bold text-emerald-700 mt-1">{formatCurrency(releasedTotal)}</div>
-            <div className="text-[11px] text-slate-400 mt-1">Confirmed transferred to your account</div>
-          </div>
-        </div>
-
         {/* Tab Navigation */}
         <div className="flex items-center gap-2 border-b border-slate-200 pb-2">
           <button

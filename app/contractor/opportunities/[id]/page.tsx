@@ -3,7 +3,6 @@
 import React from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
-import Image from 'next/image';
 import AppLayout from '@/components/ui/AppLayout';
 import { 
   Building2, 
@@ -143,7 +142,7 @@ function OpportunityDetailContent() {
       subtitle={`Opportunity Overview • ${project.city}${project.province ? `, ${project.province}` : ''}`}
       backHref="/contractor/opportunities"
     >
-      <div className="w-full space-y-6">
+      <div className="w-full space-y-2.5 lg:h-[calc(100dvh-6rem)] lg:overflow-hidden">
         {(errorMsg || successMsg) && (
           <div className="fixed top-5 right-5 z-[99999] max-w-sm w-full animate-in fade-in slide-in-from-top-2 duration-200 space-y-2">
             {errorMsg && (
@@ -180,8 +179,8 @@ function OpportunityDetailContent() {
         )}
 
         {/* Opportunity Summary Card */}
-        <div className="bg-white p-6 sm:p-7 rounded-2xl border border-slate-200 shadow-xs flex flex-col md:flex-row justify-between items-start md:items-center gap-6">
-          <div className="space-y-2">
+        <div className="bg-white p-4 sm:p-5 rounded-2xl border border-slate-200 shadow-xs flex min-h-[108px] flex-col md:flex-row justify-between items-start md:items-center gap-4">
+          <div className="space-y-1.5">
             <div className="flex items-center gap-2">
               <span className="px-3 py-1 rounded-full text-[10px] font-bold bg-blue-50 text-blue-700 border border-blue-200 uppercase">
                 {project.work_type.replace('_', ' ')}
@@ -216,13 +215,13 @@ function OpportunityDetailContent() {
           </div>
         </div>
 
-        <div className="w-full">
+        <div className="w-full min-h-0">
           {/* Project Specifications & Documents */}
-          <div className="w-full space-y-6">
+          <div className="grid w-full min-h-0 gap-2.5 lg:grid-cols-2">
             {/* CONTRACTOR QUOTATION ACTION CARD */}
-            <div className="bg-gradient-to-r from-blue-900 to-indigo-900 rounded-2xl p-6 sm:p-7 text-white shadow-md relative overflow-hidden">
-              <div className="relative z-10 flex flex-col md:flex-row md:items-center justify-between gap-6">
-                <div className="space-y-2 max-w-2xl">
+            <div className="bg-gradient-to-r from-blue-900 to-indigo-900 rounded-2xl p-4 sm:p-5 text-white shadow-md relative min-h-[148px] overflow-hidden">
+              <div className="relative z-10 flex flex-col md:flex-row md:items-center justify-between gap-4">
+                <div className="space-y-1.5 max-w-2xl">
                   <div className="flex flex-wrap items-center gap-2">
                     <span className="px-2.5 py-0.5 rounded-full text-[10px] font-bold tracking-wide uppercase bg-blue-500/30 text-blue-200 border border-blue-400/30">
                       Project Cost Breakdown & Proposal
@@ -296,13 +295,13 @@ function OpportunityDetailContent() {
             </div>
 
             {/* Architectural & Structural Specifications */}
-            <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-xs space-y-4">
+            <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-xs min-h-[148px] space-y-3">
               <h3 className="font-bold text-slate-900 text-sm border-b border-slate-100 pb-3 flex items-center gap-2">
                 <Building2 className="w-4 h-4 text-blue-600" />
                 Project Specifications
               </h3>
 
-              <div className="grid grid-cols-2 gap-4 text-xs">
+              <div className="grid grid-cols-2 gap-2.5 text-xs">
                 <div>
                   <span className="text-slate-400 block">House Type:</span>
                   <strong className="text-slate-900 capitalize">{project.house_type.replace('_', ' ')}</strong>
@@ -330,7 +329,7 @@ function OpportunityDetailContent() {
               </div>
 
               {project.budget && (
-                <div className="p-3.5 rounded-xl bg-blue-50 border border-blue-200 text-blue-900 text-xs flex justify-between items-center">
+                <div className="p-3 rounded-xl bg-blue-50 border border-blue-200 text-blue-900 text-xs flex justify-between items-center">
                   <span>Homeowner's Target Budget:</span>
                   <strong className="text-sm font-bold">{formatCurrency(project.budget)}</strong>
                 </div>
@@ -338,21 +337,18 @@ function OpportunityDetailContent() {
             </div>
 
             {/* Project Visual Renderings & Elevation */}
-            <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-xs space-y-4">
+            <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-xs min-h-[160px] space-y-3 lg:col-span-2">
               <h3 className="font-bold text-slate-900 text-sm flex items-center gap-2">
                 <Building2 className="w-4 h-4 text-blue-600" />
                 Architectural Elevation & Site Context
               </h3>
               
-              <div className="relative rounded-xl border border-slate-200 aspect-video overflow-hidden bg-slate-50 flex items-center justify-center">
-                {project.plan_file_path ? (
-                  <Image src={project.plan_file_path} alt={`${project.title} project`} fill unoptimized className="object-contain" />
-                ) : (
-                  <div className="flex flex-col items-center gap-2 text-slate-400">
-                    <Building2 className="w-10 h-10 text-slate-300" />
-                    <span className="text-xs">No project image provided</span>
-                  </div>
-                )}
+              <div className="relative flex h-[108px] items-center justify-center overflow-hidden rounded-xl border border-slate-200 bg-slate-50">
+                <div className="flex flex-col items-center gap-2 text-slate-400">
+                  <Building2 className="h-8 w-8 text-slate-300" />
+                  <span className="text-xs">No project image provided</span>
+                  <span className="text-[10px] text-slate-400">Architectural files can be reviewed during project planning.</span>
+                </div>
               </div>
             </div>
           </div>

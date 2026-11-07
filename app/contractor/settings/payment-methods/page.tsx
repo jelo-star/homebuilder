@@ -5,11 +5,8 @@ import AppLayout from '@/components/ui/AppLayout';
 import { createClient } from '@/lib/supabase/client';
 import { 
   CreditCard, 
-  Building2, 
-  ShieldCheck, 
   AlertCircle, 
   CheckCircle2, 
-  Clock, 
   Plus, 
   Smartphone,
   Landmark,
@@ -139,7 +136,7 @@ export default function ContractorPaymentMethodsPage() {
       if (!insertedAccount) throw new Error('Supabase did not return the registered payout account.');
       setPayoutAccounts(prev => [insertedAccount as ContractorPayoutAccount, ...prev]);
 
-      setMessage({ text: 'Payout account submitted successfully. Our compliance team will verify your account within 24 hours.', type: 'success' });
+      setMessage({ text: 'Payout account added successfully.', type: 'success' });
       setShowAddModal(false);
       setAccountHolderName('');
       setAccountNumber('');
@@ -187,38 +184,6 @@ export default function ContractorPaymentMethodsPage() {
     }
   };
 
-  const getStatusBadge = (status: ContractorPayoutAccount['status']) => {
-    switch (status) {
-      case 'VERIFIED':
-        return (
-          <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200">
-            <CheckCircle2 className="w-3.5 h-3.5" />
-            Verified & Ready
-          </span>
-        );
-      case 'PENDING_VERIFICATION':
-        return (
-          <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold bg-amber-50 text-amber-700 border border-amber-200">
-            <Clock className="w-3.5 h-3.5" />
-            Verification in Review
-          </span>
-        );
-      case 'RESTRICTED':
-        return (
-          <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold bg-red-50 text-red-700 border border-red-200">
-            <AlertCircle className="w-3.5 h-3.5" />
-            Action Required / Restricted
-          </span>
-        );
-      default:
-        return (
-          <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold bg-slate-100 text-slate-700 border border-slate-200">
-            Not Configured
-          </span>
-        );
-    }
-  };
-
   return (
     <AppLayout 
       userRole="contractor" 
@@ -226,17 +191,17 @@ export default function ContractorPaymentMethodsPage() {
       subtitle="Manage your registered bank and e-wallet accounts for milestone payouts"
     >
       <div className="w-full space-y-6 pb-12">
-        {/* Security / Compliance Notice */}
+        {/* Payout Information */}
         <div className="bg-gradient-to-r from-blue-900 to-indigo-900 text-white rounded-2xl p-6 shadow-md relative overflow-hidden">
           <div className="relative z-10 flex flex-col md:flex-row md:items-center justify-between gap-4">
             <div className="space-y-1.5">
               <div className="inline-flex items-center gap-2 text-xs font-semibold uppercase tracking-wider text-blue-200 bg-white/10 px-2.5 py-1 rounded-md">
-                <ShieldCheck className="w-4 h-4 text-emerald-400" />
-                Safeguarded Payout System
+                <CreditCard className="w-4 h-4 text-emerald-400" />
+                Payout Account
               </div>
               <h2 className="text-xl font-bold">Direct Milestone Disbursements</h2>
               <p className="text-blue-100 text-sm max-w-2xl leading-relaxed">
-                When a homeowner approves a milestone, released funds are automatically transferred to your verified primary payout destination. For your protection, account updates undergo mandatory compliance verification.
+                When a homeowner approves a milestone, released funds are automatically transferred to your registered payout account.
               </p>
             </div>
             <button
@@ -282,7 +247,7 @@ export default function ContractorPaymentMethodsPage() {
           <div className="p-5 border-b border-slate-100 flex items-center justify-between">
             <div>
               <h3 className="font-bold text-slate-900 text-base">Registered Payout Channels</h3>
-              <p className="text-xs text-slate-500 mt-0.5">Funds can only be sent to accounts matching your verified contractor or business name</p>
+              <p className="text-xs text-slate-500 mt-0.5">Funds are sent to your registered payout account</p>
             </div>
             <span className="text-xs font-semibold text-slate-500 bg-slate-100 px-2.5 py-1 rounded-md">
               {payoutAccounts.length} Registered
@@ -330,12 +295,6 @@ export default function ContractorPaymentMethodsPage() {
                       <div className="space-y-1">
                         <div className="flex items-center gap-2 flex-wrap">
                           <h4 className="font-bold text-slate-900 text-base">{account.bank_name || 'Account'}</h4>
-                          {account.is_primary && (
-                            <span className="px-2 py-0.5 rounded-md text-[11px] font-bold bg-blue-100 text-blue-700 border border-blue-200">
-                              Primary Payout Destination
-                            </span>
-                          )}
-                          {getStatusBadge(account.status)}
                         </div>
 
                         <div className="text-sm font-mono text-slate-700 tracking-wider">
@@ -351,20 +310,6 @@ export default function ContractorPaymentMethodsPage() {
                     </div>
 
                     <div className="flex items-center gap-2 self-end md:self-center">
-                      {account.status === 'VERIFIED' ? (
-                        <div className="text-right">
-                          <span className="text-xs font-semibold text-emerald-600 bg-emerald-50 px-2.5 py-1 rounded-md flex items-center gap-1 border border-emerald-200">
-                            <ShieldCheck className="w-3.5 h-3.5" />
-                            Active for Direct Payouts
-                          </span>
-                        </div>
-                      ) : (
-                        <div className="text-right">
-                          <span className="text-xs text-slate-500">
-                            Est. verification: ~24 hours
-                          </span>
-                        </div>
-                      )}
                       <button
                         type="button"
                         onClick={() => void handleDeleteAccount(account)}
@@ -383,38 +328,6 @@ export default function ContractorPaymentMethodsPage() {
           )}
         </div>
 
-        {/* Verification Requirements Info Card */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-          <div className="bg-white p-5 rounded-2xl border border-slate-200 space-y-2">
-            <div className="w-8 h-8 rounded-lg bg-blue-50 text-blue-600 flex items-center justify-center font-bold text-sm">
-              1
-            </div>
-            <h4 className="font-bold text-slate-900 text-sm">Name Matching</h4>
-            <p className="text-xs text-slate-500 leading-relaxed">
-              The payout account name must match either your registered personal legal name or your verified PCAB contractor business name.
-            </p>
-          </div>
-
-          <div className="bg-white p-5 rounded-2xl border border-slate-200 space-y-2">
-            <div className="w-8 h-8 rounded-lg bg-indigo-50 text-indigo-600 flex items-center justify-center font-bold text-sm">
-              2
-            </div>
-            <h4 className="font-bold text-slate-900 text-sm">Tokenized Security</h4>
-            <p className="text-xs text-slate-500 leading-relaxed">
-              Raw financial credentials are encrypted and tokenized. Homeowners and unauthorized personnel never see your full account numbers.
-            </p>
-          </div>
-
-          <div className="bg-white p-5 rounded-2xl border border-slate-200 space-y-2">
-            <div className="w-8 h-8 rounded-lg bg-emerald-50 text-emerald-600 flex items-center justify-center font-bold text-sm">
-              3
-            </div>
-            <h4 className="font-bold text-slate-900 text-sm">Automated Settlement</h4>
-            <p className="text-xs text-slate-500 leading-relaxed">
-              Once you finish a milestone and the homeowner signs off on proof of work, funds are credited within 1-2 business days.
-            </p>
-          </div>
-        </div>
       </div>
 
       {/* Add Payout Account Modal */}
@@ -424,7 +337,7 @@ export default function ContractorPaymentMethodsPage() {
             <div className="p-6 border-b border-slate-100 flex items-center justify-between">
               <div>
                 <h3 className="font-bold text-slate-900 text-lg">Add Payout Account</h3>
-                <p className="text-xs text-slate-500">Provide verified payout details for milestone disbursements</p>
+                <p className="text-xs text-slate-500">Provide payout details for milestone disbursements</p>
               </div>
               <button 
                 onClick={() => setShowAddModal(false)}
@@ -521,7 +434,7 @@ export default function ContractorPaymentMethodsPage() {
                   className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
                   required
                 />
-                <p className="text-[11px] text-slate-400">Must strictly match your corporate or verified government registration name.</p>
+                <p className="text-[11px] text-slate-400">Use the name registered on the payout account.</p>
               </div>
 
               <div className="space-y-1.5">
@@ -554,7 +467,7 @@ export default function ContractorPaymentMethodsPage() {
                   disabled={isSubmitting}
                   className="px-5 py-2 rounded-xl bg-blue-600 text-white text-sm font-semibold hover:bg-blue-700 transition disabled:opacity-50"
                 >
-                  {isSubmitting ? 'Registering...' : 'Submit for Verification'}
+                  {isSubmitting ? 'Adding...' : 'Add Payout Account'}
                 </button>
               </div>
             </form>

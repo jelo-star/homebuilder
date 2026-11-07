@@ -11,13 +11,11 @@ import {
   CheckCircle2,
   AlertCircle,
   Search,
-  Sparkles,
   FileText,
 } from 'lucide-react';
 import { createClient } from '@/lib/supabase/client';
-import { Project, Quote, ContractorProfile } from '@/types/database';
+import { Project, Quote } from '@/types/database';
 import { formatCurrency } from '@/lib/utils/formatters';
-import { calculateMatchScore } from '@/lib/utils/matching';
 
 const PAGE_SIZE = 12;
 
@@ -29,14 +27,11 @@ function escapeSearchFilter(value: string): string {
 export default function OpportunitiesPage() {
   const [loading, setLoading] = React.useState(true);
   const [loadError, setLoadError] = React.useState('');
-  const [contractor, setContractor] = React.useState<ContractorProfile | null>(null);
   const [opportunities, setOpportunities] = React.useState<Project[]>([]);
   const [myQuotes, setMyQuotes] = React.useState<Record<string, Pick<Quote, 'price'>>>({});
   const [uniqueCities, setUniqueCities] = React.useState<string[]>([]);
   const [totalCount, setTotalCount] = React.useState(0);
   const [currentPage, setCurrentPage] = React.useState(0);
-  const contractorRef = React.useRef<ContractorProfile | null>(null);
-  const profileLoadedRef = React.useRef(false);
   const citiesLoadedRef = React.useRef(false);
   const requestIdRef = React.useRef(0);
   const router = useRouter();
@@ -47,8 +42,6 @@ export default function OpportunitiesPage() {
   const [selectedWorkType, setSelectedWorkType] = React.useState('all');
   const [selectedHouseType, setSelectedHouseType] = React.useState('all');
   const [selectedFinish, setSelectedFinish] = React.useState('all');
-  const [minMatchOnly, setMinMatchOnly] = React.useState(false);
-
   const [successMsg, setSuccessMsg] = React.useState('');
   const [errorMsg, setErrorMsg] = React.useState('');
 
@@ -67,29 +60,6 @@ export default function OpportunitiesPage() {
       setLoading(false);
       return;
     }
-    // 1. Fetch Contractor Profile
-    let currentContractor = contractorRef.current;
-    if (user && !profileLoadedRef.current) {
-      const { data: cData, error: contractorError } = await supabase
-        .from('contractor_profiles')
-        .select('profile_id, verification_status, is_active, specialties, finish_levels, work_types, rating_count, rating_avg, years_experience, projects_completed, service_cities')
-        .eq('profile_id', user.id)
-        .maybeSingle();
-      if (contractorError) {
-        if (requestId !== requestIdRef.current) return;
-        setLoadError(contractorError.message);
-        setLoading(false);
-        return;
-      }
-      if (cData) {
-        currentContractor = cData as ContractorProfile;
-      }
-      contractorRef.current = currentContractor;
-      profileLoadedRef.current = true;
-    }
-    if (requestId !== requestIdRef.current) return;
-    setContractor(currentContractor);
-
     // Load the complete city filter list independently of the visible project page.
     if (!citiesLoadedRef.current) {
       const allCities: string[] = [];
@@ -187,23 +157,7 @@ export default function OpportunitiesPage() {
     return () => window.clearTimeout(timeoutId);
   }, [loadData]);
 
-  const scoredOpportunities = React.useMemo(() => {
-    return opportunities
-      .map((proj) => {
-        const matchResult = contractor ? calculateMatchScore(proj, contractor) : { score: 0, reasons: { summary: 'Complete your contractor profile to see a match score.' } };
-        return { ...proj, matchScore: matchResult.score, matchReasons: matchResult.reasons };
-      });
-  }, [opportunities, contractor]);
-
-  // Filtered & Ranked Opportunities
-  const filteredOpportunities = React.useMemo(() => {
-    return scoredOpportunities
-      .filter((proj) => {
-        const matchesMinScore = !minMatchOnly || proj.matchScore >= 75;
-        return matchesMinScore;
-      })
-      .sort((a, b) => b.matchScore - a.matchScore);
-  }, [scoredOpportunities, minMatchOnly]);
+  const filteredOpportunities = opportunities;
 
   const totalPages = Math.ceil(totalCount / PAGE_SIZE);
   const firstResult = totalCount === 0 ? 0 : currentPage * PAGE_SIZE + 1;
@@ -253,7 +207,7 @@ export default function OpportunitiesPage() {
         )}
 
         {/* Search & Filter Toolbar */}
-        <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-xs space-y-4">
+        <div className="space-y-4 rounded-2xl border border-slate-200 bg-white p-4 shadow-xs sm:p-5">
           <div className="flex flex-col md:flex-row gap-3">
             <div className="relative flex-1">
               <Search className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
@@ -265,7 +219,7 @@ export default function OpportunitiesPage() {
                   setCurrentPage(0);
                   setSearchTerm(e.target.value);
                 }}
-                className="w-full pl-9 pr-4 py-2.5 text-xs rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                className="w-full rounded-xl border border-slate-200 bg-slate-50 py-2.5 pl-9 pr-4 text-xs focus:outline-none focus:ring-2 focus:ring-blue-500"
               />
             </div>
 
@@ -324,29 +278,14 @@ export default function OpportunitiesPage() {
                 <option value="premium">Premium</option>
               </select>
 
-              <button
-                type="button"
-                onClick={() => {
-                  setCurrentPage(0);
-                  setMinMatchOnly(!minMatchOnly);
-                }}
-                className={`text-xs px-3 py-2.5 rounded-xl border font-medium transition-colors flex items-center gap-1.5 ${
-                  minMatchOnly
-                    ? 'bg-blue-50 border-blue-300 text-blue-700 font-bold'
-                    : 'bg-white border-slate-200 text-slate-600 hover:bg-slate-50'
-                }`}
-              >
-                <Sparkles className="w-3.5 h-3.5 text-amber-500" />
-                <span>High Match (75%+)</span>
-              </button>
             </div>
           </div>
         </div>
 
         {/* Opportunities Feed */}
         {loading ? (
-          <div className="p-16 text-center text-xs text-slate-500 bg-white rounded-2xl border border-slate-200">
-            Scanning marketplace for matching residential opportunities...
+          <div className="grid grid-cols-1 gap-6 md:grid-cols-2 lg:grid-cols-3">
+            {[1, 2, 3].map(item => <div key={item} className="h-[30rem] animate-pulse rounded-2xl border border-slate-200 bg-white" />)}
           </div>
         ) : loadError ? (
           <div className="p-16 text-center text-xs text-red-600 bg-white rounded-2xl border border-red-200">{loadError}</div>
@@ -370,10 +309,10 @@ export default function OpportunitiesPage() {
               return (
                 <div
                   key={p.id}
-                  className="bg-white rounded-2xl border border-slate-200 overflow-hidden shadow-xs hover:shadow-md hover:border-blue-300 transition-all flex flex-col justify-between"
+                  className="flex flex-col justify-between overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-xs transition-all hover:-translate-y-0.5 hover:border-blue-300 hover:shadow-md"
                 >
                   {/* Project Image Banner */}
-                  <div className="relative aspect-video w-full bg-slate-100 overflow-hidden flex items-center justify-center">
+                  <div className="relative aspect-video w-full overflow-hidden bg-slate-100 flex items-center justify-center">
                     {p.plan_file_path ? (
                       <Image src={p.plan_file_path} alt={`${p.title} project`} fill unoptimized className="object-cover" />
                     ) : (
@@ -393,19 +332,6 @@ export default function OpportunitiesPage() {
                         <MapPin className="w-3.5 h-3.5 text-slate-400 shrink-0" />
                         <span>{p.city}{p.province ? `, ${p.province}` : ''}</span>
                       </div>
-                    </div>
-
-                    <div className="p-2.5 rounded-xl bg-slate-50 border border-slate-100 flex items-center justify-between text-xs">
-                      <div className="flex items-center gap-1.5">
-                        <Sparkles className="w-3.5 h-3.5 text-amber-500" />
-                        <span className="text-slate-600 font-medium">Match Fit:</span>
-                        <span className={`font-bold ${p.matchScore >= 80 ? 'text-emerald-700' : p.matchScore >= 60 ? 'text-blue-700' : 'text-slate-700'}`}>
-                          {p.matchScore}%
-                        </span>
-                      </div>
-                      <span className="text-[11px] text-slate-400 truncate max-w-[150px]">
-                        {p.matchReasons?.summary || 'Match score unavailable'}
-                      </span>
                     </div>
 
                     <div className="grid grid-cols-2 gap-2 text-xs py-1 border-t border-b border-slate-100 text-slate-600">
@@ -485,9 +411,7 @@ export default function OpportunitiesPage() {
         {!loading && !loadError && totalPages > 0 && (
           <nav aria-label="Opportunity pages" className="flex flex-col sm:flex-row items-center justify-between gap-3 bg-white p-4 rounded-2xl border border-slate-200">
             <p className="text-xs text-slate-600" aria-live="polite">
-              {minMatchOnly
-                ? `Page range ${firstResult}–${lastResult} of ${totalCount} opportunities (before high-match filtering)`
-                : `Showing ${firstResult}–${lastResult} of ${totalCount} opportunities`}
+              {`Showing ${firstResult}–${lastResult} of ${totalCount} opportunities`}
             </p>
             <div className="flex items-center gap-3">
               <button
