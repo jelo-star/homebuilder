@@ -946,6 +946,12 @@ export default function AdminTransactionsPage() {
                               : payment.payout_status === 'PAID';
                             return { payment, pending, paid, rejected, transferred };
                           });
+                          const transferredPayments = paymentStatuses.filter(status => status.transferred);
+                          const payoutProofPayment = transferredPayments.find(status => status.payment.payout_proof_url)?.payment;
+                          const milestoneTransferAmount = Number(
+                            milestonePayout?.net_amount
+                              ?? transferredPayments.reduce((total, status) => total + getVerifiedPaymentAmount(status.payment), 0)
+                          );
 
                           return (
                             <tr key={groupKey} className="transition-colors hover:bg-blue-50/30">
@@ -1056,7 +1062,7 @@ export default function AdminTransactionsPage() {
                               <td className="px-4 py-4">
                                 <details className="group">
                                   <summary className="ml-auto block w-fit cursor-pointer list-none rounded-lg border border-slate-200 bg-white px-3 py-2 text-[10px] font-bold text-slate-700 shadow-xs transition hover:border-blue-200 hover:bg-blue-50">
-                                    Actions ({payments.length}) <span className="text-blue-600">▾</span>
+                                    Admin actions <span className="text-blue-600">▾</span>
                                   </summary>
                                   <div className="ml-auto mt-2 max-h-80 w-80 max-w-full space-y-2 overflow-y-auto rounded-xl border border-slate-200 bg-white p-2 text-left shadow-xl">
                                     {paymentStatuses.map(({ payment, pending, paid, rejected, transferred }, index) => (
@@ -1099,27 +1105,41 @@ export default function AdminTransactionsPage() {
                                           ) : (
                                             <span className="rounded-lg bg-red-50 px-2 py-1 text-[10px] font-semibold text-red-600">Payment proof missing</span>
                                           )}
-                                          {transferred && (payment.payout_proof_url || milestonePayout?.proof_file_url) ? (
-                                            <button
-                                              type="button"
-                                              onClick={() => setInspectingPayoutProof({
-                                                url: payment.payout_proof_url || milestonePayout?.proof_file_url || '',
-                                                ref: payment.payout_tx_ref || milestonePayout?.provider_ref || 'DISBURSE-REF',
-                                                contractor: proj.contractorName,
-                                                amount: Number(milestonePayout?.net_amount ?? getVerifiedPaymentAmount(payment)),
-                                                method: milestonePayout?.payout_method || payment.payout_method || payment.payment_method,
-                                                date: milestonePayout?.sent_at || payment.payout_released_at || null,
-                                              })}
-                                              className="inline-flex items-center gap-1 rounded-lg bg-indigo-50 px-2 py-1 text-[10px] font-bold text-indigo-700 hover:bg-indigo-100"
-                                            >
-                                              <Eye className="h-3 w-3" /> Transfer Proof
-                                            </button>
-                                          ) : transferred ? (
-                                            <span className="rounded-lg bg-amber-50 px-2 py-1 text-[10px] font-semibold text-amber-700">Transfer proof missing</span>
-                                          ) : null}
                                         </div>
                                       </div>
                                     ))}
+                                    {transferredPayments.length > 0 && (
+                                      <div className="space-y-2 rounded-xl border border-emerald-200 bg-emerald-50/70 p-3">
+                                        <div className="flex items-start justify-between gap-2">
+                                          <div>
+                                            <div className="text-[11px] font-bold text-emerald-900">
+                                              Full milestone transfer · ₱{milestoneTransferAmount.toLocaleString('en-US', { maximumFractionDigits: 0 })}
+                                            </div>
+                                            <div className="mt-0.5 text-[10px] font-semibold text-emerald-700">Transferred once by admin</div>
+                                          </div>
+                                        </div>
+                                        <div className="flex flex-wrap gap-1.5 border-t border-emerald-200 pt-2">
+                                          {milestonePayout?.proof_file_url || payoutProofPayment?.payout_proof_url ? (
+                                            <button
+                                              type="button"
+                                              onClick={() => setInspectingPayoutProof({
+                                                url: milestonePayout?.proof_file_url || payoutProofPayment?.payout_proof_url || '',
+                                                ref: milestonePayout?.provider_ref || payoutProofPayment?.payout_tx_ref || 'DISBURSE-REF',
+                                                contractor: proj.contractorName,
+                                                amount: milestoneTransferAmount,
+                                                method: milestonePayout?.payout_method || payoutProofPayment?.payout_method || payoutProofPayment?.payment_method || 'bank_transfer',
+                                                date: milestonePayout?.sent_at || payoutProofPayment?.payout_released_at || null,
+                                              })}
+                                              className="inline-flex items-center gap-1 rounded-lg bg-indigo-100 px-2 py-1 text-[10px] font-bold text-indigo-700 hover:bg-indigo-200"
+                                            >
+                                              <Eye className="h-3 w-3" /> Transfer Proof
+                                            </button>
+                                          ) : (
+                                            <span className="rounded-lg bg-amber-100 px-2 py-1 text-[10px] font-semibold text-amber-700">Transfer proof missing</span>
+                                          )}
+                                        </div>
+                                      </div>
+                                    )}
                                   </div>
                                 </details>
                               </td>

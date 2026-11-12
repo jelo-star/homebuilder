@@ -12,6 +12,7 @@ type Equipment = { name: string; quantity: string; rate: string; duration: strin
 type Expense = { name: string; description: string; amount: string };
 type DetailedProposal = { materials?: Material[]; labor?: Labor[]; equipment?: Equipment[]; overhead?: Expense[]; profit?: { amount?: number }; contingency?: { amount?: number }; taxes?: { amount?: number } };
 type ProposalTab = 'overview' | 'materials' | 'labor' | 'machinery' | 'costs';
+const PROPOSAL_TAB_ORDER: ProposalTab[] = ['overview', 'materials', 'labor', 'machinery', 'costs'];
 
 const blankMaterial = (): Material => ({ name: '', quantity: '', unit: '', unitPrice: '' });
 const blankLabor = (): Labor => ({ position: '', workers: '', dailyRate: '', days: '' });
@@ -79,10 +80,22 @@ export default function ContractorCostBreakdownModal({ project, existingQuote, i
     if (totalAmount <= 0) return 'The calculated proposal total must be greater than ₱0.';
     return '';
   };
+  const moveTab = (direction: -1 | 1) => {
+    const currentIndex = PROPOSAL_TAB_ORDER.indexOf(activeTab);
+    const nextTab = PROPOSAL_TAB_ORDER[currentIndex + direction];
+    if (nextTab) {
+      setErrorMessage('');
+      setActiveTab(nextTab);
+    }
+  };
   const submitProposal = async (event: React.FormEvent) => {
     event.preventDefault();
     if (existingQuote?.status === 'accepted') {
       setErrorMessage('Accepted proposals cannot be edited.');
+      return;
+    }
+    if (activeTab !== PROPOSAL_TAB_ORDER[PROPOSAL_TAB_ORDER.length - 1]) {
+      moveTab(1);
       return;
     }
     const validationError = validate();
@@ -270,6 +283,8 @@ export default function ContractorCostBreakdownModal({ project, existingQuote, i
     { id: 'machinery', label: 'Machinery', icon: Tractor, total: equipmentTotal },
     { id: 'costs', label: 'Other costs', icon: Wrench, total: sum([overheadTotal, money(profit), money(contingency), money(taxes)]) },
   ];
+  const activeTabIndex = PROPOSAL_TAB_ORDER.indexOf(activeTab);
+  const isLastTab = activeTabIndex === PROPOSAL_TAB_ORDER.length - 1;
   const pageMode = mode === 'page';
   return (
     <div className={pageMode ? '' : 'fixed inset-0 z-[100] flex items-center justify-center bg-slate-950/60 p-3 sm:p-6'}>
@@ -354,9 +369,28 @@ export default function ContractorCostBreakdownModal({ project, existingQuote, i
             <p className="hidden text-xs text-slate-500 sm:block">Calculated total <strong className="ml-1 text-sm text-emerald-700">{formatCurrency(totalAmount)}</strong></p>
             <div className="ml-auto flex gap-2">
               {!pageMode && <button type="button" onClick={onClose} className="rounded-lg border border-slate-300 px-3 py-2 text-xs font-semibold text-slate-700">Cancel</button>}
-              <button type="submit" disabled={submitting} className="inline-flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2 text-xs font-bold text-white disabled:cursor-not-allowed disabled:opacity-50">
-                <Send className="h-3.5 w-3.5" />{submitting ? 'Submitting…' : 'Submit proposal'}
-              </button>
+              {activeTabIndex > 0 && (
+                <button
+                  type="button"
+                  onClick={() => moveTab(-1)}
+                  className="rounded-lg border border-slate-300 px-3 py-2 text-xs font-semibold text-slate-700"
+                >
+                  Previous
+                </button>
+              )}
+              {isLastTab ? (
+                <button type="submit" disabled={submitting} className="inline-flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2 text-xs font-bold text-white disabled:cursor-not-allowed disabled:opacity-50">
+                  <Send className="h-3.5 w-3.5" />{submitting ? 'Submitting…' : 'Submit proposal'}
+                </button>
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => moveTab(1)}
+                  className="rounded-lg bg-blue-600 px-4 py-2 text-xs font-bold text-white hover:bg-blue-700"
+                >
+                  Next
+                </button>
+              )}
             </div>
           </footer>
         </form>

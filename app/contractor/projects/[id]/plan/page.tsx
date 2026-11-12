@@ -975,16 +975,16 @@ function ContractorProjectPlanContent() {
                   <p className="text-[11px] italic text-slate-400">No comments yet. Start a discussion with the homeowner about the plan.</p>
                 ) : (
                   comments.map(c => {
-                    const isHomeowner = c.author_role === 'homeowner';
+                    const isContractor = c.author_role === 'contractor';
                     return (
-                      <div key={c.id} className={`flex ${isHomeowner ? 'justify-end' : 'justify-start'}`}>
+                      <div key={c.id} className={`flex ${isContractor ? 'justify-end' : 'justify-start'}`}>
                         <div className={`max-w-[85%] rounded-2xl px-3.5 py-2.5 text-xs leading-relaxed shadow-xs ${
-                          isHomeowner
+                          isContractor
                             ? 'rounded-br-md bg-emerald-700 text-white'
                             : 'rounded-bl-md border border-slate-200 bg-white text-slate-800'
                         }`}>
                           <div className={`mb-1 flex items-center justify-between gap-4 text-[10px] ${
-                            isHomeowner ? 'text-emerald-100' : 'text-slate-500'
+                            isContractor ? 'text-emerald-100' : 'text-slate-500'
                           }`}>
                             <strong className="font-semibold">{c.author_name}</strong>
                             <time dateTime={c.created_at}>
