@@ -116,6 +116,8 @@ function ProjectDetailsContent() {
   const [milestones, setMilestones] = React.useState<Milestone[]>([]);
   const [loadingProofMilestones, setLoadingProofMilestones] = React.useState<Record<string, boolean>>({});
   const [projectTransactions, setProjectTransactions] = React.useState<any[]>([]);
+  const [paymentTransactionsLoaded, setPaymentTransactionsLoaded] = React.useState(false);
+  const [paymentTransactionsError, setPaymentTransactionsError] = React.useState('');
   const [disputes, setDisputes] = React.useState<Dispute[]>([]);
   const [projectPlan, setProjectPlan] = React.useState<ProjectPlan | null>(null);
   const [planComments, setPlanComments] = React.useState<ProjectPlanComment[]>([]);
@@ -259,6 +261,8 @@ function ProjectDetailsContent() {
 
     setLoading(true);
     setErrorMsg('');
+    setPaymentTransactionsLoaded(false);
+    setPaymentTransactionsError('');
     loadedPreviewContractorsRef.current.clear();
     loadedProofMilestonesRef.current.clear();
     loadedProjectTabsRef.current.clear();
@@ -389,12 +393,16 @@ function ProjectDetailsContent() {
   React.useEffect(() => {
     if (loading || !project) return;
 
-    const tab = activeTab === 'payments' || isPaymentModalOpen
+    const tab = activeTab === 'payments' || isPaymentModalOpen || Boolean(milestoneToApprove)
       ? 'payments'
       : activeTab === 'disputes' || activeTab === 'project_plan'
         ? activeTab
         : null;
-    if (!tab || (tab !== 'payments' && loadedProjectTabsRef.current.has(tab))) return;
+    if (
+      !tab
+      || (tab === 'payments' && paymentTransactionsLoaded)
+      || (tab !== 'payments' && loadedProjectTabsRef.current.has(tab))
+    ) return;
 
     let active = true;
     setLoadingTabData(true);
@@ -410,6 +418,8 @@ function ProjectDetailsContent() {
           if (transactionsResult.error) throw transactionsResult.error;
           if (!active) return;
           setProjectTransactions(transactionsResult.data || []);
+          setPaymentTransactionsLoaded(true);
+          setPaymentTransactionsError('');
         } else if (tab === 'disputes') {
           const { data, error } = await supabase
             .from('disputes')
@@ -432,7 +442,12 @@ function ProjectDetailsContent() {
         if (tab !== 'payments') loadedProjectTabsRef.current.add(tab);
       } catch (error) {
         if (active) {
-          setErrorMsg(error instanceof Error ? error.message : `Could not load ${tab.replace('_', ' ')} data.`);
+          const message = error instanceof Error ? error.message : `Could not load ${tab.replace('_', ' ')} data.`;
+          if (tab === 'payments') {
+            setPaymentTransactionsLoaded(false);
+            setPaymentTransactionsError(message);
+          }
+          setErrorMsg(message);
         }
       } finally {
         if (active) setLoadingTabData(false);
@@ -444,7 +459,7 @@ function ProjectDetailsContent() {
       active = false;
       setLoadingTabData(false);
     };
-  }, [activeTab, isPaymentModalOpen, loading, project, projectId]);
+  }, [activeTab, isPaymentModalOpen, loading, milestoneToApprove, paymentTransactionsLoaded, project, projectId]);
 
   React.useEffect(() => {
     if (!isPaymentModalOpen) return;
@@ -978,14 +993,18 @@ function ProjectDetailsContent() {
     const supabase = createClient();
 
     try {
-      const { data: approvedMilestoneId, error } = await supabase.rpc('approve_milestone', {
-        p_milestone_id: m.id,
-      });
+      const isDisputedFix = m.status === 'disputed';
+      const { data: approvedMilestoneId, error } = await supabase.rpc(
+        isDisputedFix ? 'approve_disputed_milestone_fix' : 'approve_milestone',
+        {
+          p_milestone_id: m.id,
+        },
+      );
       if (error) {
         const detail = [error.message, error.details, error.hint].filter(Boolean).join(' — ');
         throw new Error(detail || `Milestone approval failed (${error.code || 'unknown error'}).`);
       }
-      if (!approvedMilestoneId) throw new Error('The milestone approval was not confirmed.');
+      if (!isDisputedFix && !approvedMilestoneId) throw new Error('The milestone approval was not confirmed.');
       await loadData();
       setMilestoneToApprove(null);
       const message = `Milestone "${cleanMilestoneTitle(m.name)}" approved. Funds remain in escrow until an administrator authorizes release.`;
@@ -1043,42 +1062,11 @@ function ProjectDetailsContent() {
     }
   };
 
-  // Homeowner confirms rectification and marks dispute resolved
-  const handleResolveDispute = async (d: Dispute) => {
-    setApprovingMilestoneId(d.milestone_id);
-    const supabase = createClient();
-    try {
-      const { error } = await supabase.rpc('approve_disputed_milestone_fix', {
-        p_milestone_id: d.milestone_id,
-      });
-      if (error) throw error;
-    } catch (error: unknown) {
-      console.error('Dispute approval failed:', error);
-      const message = typeof error === 'object' && error !== null && 'message' in error && typeof error.message === 'string'
-        ? error.message
-        : error instanceof Error ? error.message : 'Failed to resolve dispute. Please try again.';
-      showToast(message, 'error', 'Dispute Update Failed');
-      setApprovingMilestoneId(null);
-      return;
-    }
-
-    const now = new Date().toISOString();
-    setDisputes(prev => prev.map(item => item.id === d.id
-      ? { ...item, status: 'resolved_fix', resolved_at: now, resolution: 'Homeowner accepted the contractor rectification; stage returned to in progress without payout' }
-      : item));
-    const resolvedMilestone = milestones.find(milestone => milestone.id === d.milestone_id);
-    setMilestones(prev => prev.map(milestone => {
-      if (milestone.id === d.milestone_id) {
-        return { ...milestone, status: 'in_progress', approved_at: null, paid_at: null };
-      }
-      if (resolvedMilestone && milestone.seq === resolvedMilestone.seq + 1 && milestone.status === 'in_progress') {
-        return { ...milestone, status: 'locked' };
-      }
-      return milestone;
-    }));
-    setProject(prev => prev ? { ...prev, status: 'in_progress' } : prev);
-    showToast('Fix approved. The milestone is back in progress; no payout was released.', 'success', 'Dispute Resolved');
-    setApprovingMilestoneId(null);
+  const handleOpenMilestoneApproval = (milestone: Milestone) => {
+    setErrorMsg('');
+    setPaymentTransactionsError('');
+    setPaymentTransactionsLoaded(false);
+    setMilestoneToApprove(milestone);
   };
 
   // Homeowner Accepts Contractor Proposal & Awards Contract -> Transitions to Project Planning Phase
@@ -1462,7 +1450,10 @@ function ProjectDetailsContent() {
 
       if (milestoneToPayAndApprove) {
         setMilestones(prev => prev.map(milestone => milestone.id === milestoneToPayAndApprove.id
-          ? { ...milestone, status: 'payment_verification_pending' }
+          ? {
+              ...milestone,
+              status: milestone.status === 'disputed' ? 'disputed' : 'payment_verification_pending',
+            }
           : milestone));
       }
 
@@ -2740,20 +2731,20 @@ function ProjectDetailsContent() {
                               </div>
                             )}
 
-                            {/* Action Buttons for this Milestone - STRICTLY NO PAYMENT BUTTON IN MILESTONES */}
+                            {/* Review actions for this milestone */}
                             <div className="pt-2 flex items-center justify-end gap-2.5 flex-wrap">
                               {isDisputed && (
                                 <button
                                   type="button"
                                   disabled={!activeDispute || visibleProofs.length === 0 || approvingMilestoneId === m.id}
-                                  onClick={() => activeDispute && void handleResolveDispute(activeDispute)}
+                                  onClick={() => handleOpenMilestoneApproval(m)}
                                   title={!activeDispute || visibleProofs.length === 0
                                     ? 'The contractor must submit replacement photos first.'
-                                    : 'Approve the contractor fix; escrow release remains subject to admin authorization.'}
+                                    : 'Review the replacement photos, pay any outstanding milestone balance, and approve.'}
                                   className="px-4 py-2 rounded-xl bg-[#136F48] hover:bg-[#0f5738] text-white text-xs font-bold transition flex items-center gap-1.5 shadow-xs disabled:bg-slate-300 disabled:text-slate-600 disabled:cursor-not-allowed"
                                 >
                                   <CheckCircle2 className="w-3.5 h-3.5" />
-                                  <span>{approvingMilestoneId === m.id ? 'Approving...' : 'Approve'}</span>
+                                  <span>{approvingMilestoneId === m.id ? 'Approving...' : 'Pay & Approve'}</span>
                                 </button>
                               )}
 
@@ -2778,7 +2769,7 @@ function ProjectDetailsContent() {
 
                                   <button
                                     type="button"
-                                    onClick={() => setMilestoneToApprove(m)}
+                                    onClick={() => handleOpenMilestoneApproval(m)}
                                     className="px-4 py-2 rounded-xl bg-[#136F48] hover:bg-[#0f5738] text-white text-xs font-bold transition flex items-center gap-1.5 shadow-xs"
                                   >
                                     <CheckCircle2 className="w-3.5 h-3.5" />
@@ -3074,11 +3065,11 @@ function ProjectDetailsContent() {
                       {!isResolved && d.contractor_fix_status === 'fixed' && (
                         <button
                           type="button"
-                          disabled={approvingMilestoneId === d.milestone_id}
-                          onClick={() => void handleResolveDispute(d)}
+                          disabled={!targetMilestone || approvingMilestoneId === d.milestone_id}
+                          onClick={() => targetMilestone && handleOpenMilestoneApproval(targetMilestone)}
                           className="mt-3 rounded-lg bg-emerald-600 px-3 py-2 text-xs font-bold text-white hover:bg-emerald-700"
                         >
-                          {approvingMilestoneId === d.milestone_id ? 'Approving...' : 'Approve Fix'}
+                          {approvingMilestoneId === d.milestone_id ? 'Approving...' : 'Pay & Approve'}
                         </button>
                       )}
                     </article>
@@ -3719,6 +3710,20 @@ function ProjectDetailsContent() {
                     </div>
 
                     {(() => {
+                      if (!paymentTransactionsLoaded || loadingTabData) {
+                        return (
+                          <div className="rounded-xl border border-blue-200 bg-blue-50 px-4 py-3 text-xs text-blue-800" role="status">
+                            Checking verified milestone payments…
+                          </div>
+                        );
+                      }
+                      if (paymentTransactionsError) {
+                        return (
+                          <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-xs text-red-800" role="alert">
+                            Could not check verified milestone payments: {paymentTransactionsError}
+                          </div>
+                        );
+                      }
                       const milestoneTotal = Number(
                         milestoneToApprove.homeowner_total_amount ?? milestoneToApprove.amount ?? 0,
                       );
@@ -3768,6 +3773,7 @@ function ProjectDetailsContent() {
 
                     {/* Offer exactly one homeowner action based on verified funding. */}
                     {(() => {
+                      if (!paymentTransactionsLoaded || loadingTabData || paymentTransactionsError) return null;
                       const outstandingAmount = milestoneFunding.get(milestoneToApprove.id)?.outstanding
                         ?? Number(milestoneToApprove.homeowner_total_amount ?? milestoneToApprove.amount ?? 0);
                       const pendingAmount = pendingMilestonePayments.get(milestoneToApprove.id) || 0;
@@ -3805,7 +3811,9 @@ function ProjectDetailsContent() {
                           <span>
                             {approvingMilestoneId === milestoneToApprove.id
                               ? 'Approving Milestone...'
-                              : 'Approve Milestone'}
+                              : milestoneToApprove.status === 'disputed'
+                                ? 'Approve Fix & Milestone'
+                                : 'Approve Milestone'}
                           </span>
                         </button>
                       );
