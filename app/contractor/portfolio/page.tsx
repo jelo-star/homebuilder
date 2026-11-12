@@ -26,6 +26,10 @@ type CompletedContractProject = Pick<
   'id' | 'title' | 'city' | 'province' | 'updated_at' | 'plan_file_path' | 'floor_area_sqm' | 'floors'
 >;
 
+type PortfolioGalleryEntry =
+  | { kind: 'completed'; id: string; project: CompletedContractProject }
+  | { kind: 'showcase'; id: string; item: PortfolioItem };
+
 export default function ContractorPortfolioPage() {
   return (
     <React.Suspense fallback={<div className="p-16 text-center text-xs text-slate-500">Loading portfolio...</div>}>
@@ -63,6 +67,10 @@ function ContractorPortfolioContent() {
       }),
     );
   }, [portfolioItems]);
+  const portfolioGalleryItems: PortfolioGalleryEntry[] = [
+    ...completedProjects.map(project => ({ kind: 'completed' as const, id: `project-${project.id}`, project })),
+    ...portfolioItems.map(item => ({ kind: 'showcase' as const, id: `showcase-${item.id}`, item })),
+  ];
 
   const resetForm = () => {
     setTitle('');
@@ -374,78 +382,14 @@ function ContractorPortfolioContent() {
           </div>
         </section>
 
-        {completedProjects.length > 0 && (
-          <section className="space-y-4">
-            <div className="flex flex-col gap-1 px-1 sm:flex-row sm:items-end sm:justify-between">
-              <div>
-                <h2 className="text-lg font-bold text-slate-900">Completed HomeBuildr Projects</h2>
-                <p className="mt-1 text-xs text-slate-500">Completed awarded projects are automatically shown here and removed from your active dashboard.</p>
-              </div>
-              <span className="text-xs font-semibold text-slate-400">
-                {completedProjects.length} completed {completedProjects.length === 1 ? 'project' : 'projects'}
-              </span>
-            </div>
-            <div className="grid grid-cols-1 gap-6 md:grid-cols-2 lg:grid-cols-3">
-              {completedProjects.map(project => (
-                <article
-                  key={project.id}
-                  className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-xs transition-all hover:-translate-y-0.5 hover:border-emerald-200 hover:shadow-md"
-                >
-                  <Link href={`/contractor/projects/${project.id}`} className="block">
-                    <div
-                      className="relative flex h-48 items-center justify-center overflow-hidden bg-slate-100 bg-cover bg-center"
-                      style={project.plan_file_path ? { backgroundImage: `url("${project.plan_file_path}")` } : undefined}
-                    >
-                      {!project.plan_file_path && (
-                        <div className="text-center text-slate-400">
-                          <Building2 className="mx-auto h-9 w-9 text-slate-300" />
-                          <span className="mt-1 block text-[11px]">Completed Build</span>
-                        </div>
-                      )}
-                      <span className="absolute right-3 top-3 inline-flex items-center gap-1 rounded-full bg-emerald-50/95 px-2.5 py-1 text-[10px] font-bold text-emerald-700 shadow-sm backdrop-blur">
-                        <CheckCircle2 className="h-3 w-3" />
-                        Completed
-                      </span>
-                    </div>
-                    <div className="space-y-3 p-5">
-                      <div>
-                        <h3 className="text-base font-bold text-slate-900">{project.title}</h3>
-                        <p className="mt-1 text-xs text-slate-500">
-                          Completed in {new Date(project.updated_at).getFullYear()}
-                        </p>
-                      </div>
-                      <p className="text-xs text-slate-600">
-                        {[project.city, project.province].filter(Boolean).join(', ') || 'Location not provided'}
-                      </p>
-                      {(project.floor_area_sqm || project.floors) && (
-                        <div className="grid grid-cols-2 gap-2 border-t border-slate-100 pt-3 text-xs text-slate-600">
-                          {project.floor_area_sqm && (
-                            <span><span className="text-slate-400">Area:</span> <strong className="text-slate-900">{project.floor_area_sqm} sq.m</strong></span>
-                          )}
-                          {project.floors && (
-                            <span><span className="text-slate-400">Floors:</span> <strong className="text-slate-900">{project.floors} Storey</strong></span>
-                          )}
-                        </div>
-                      )}
-                    </div>
-                  </Link>
-                  <div className="border-t border-slate-100 bg-slate-50 px-5 py-3">
-                    <Link href={`/contractor/projects/${project.id}`} className="text-xs font-bold text-blue-600 hover:text-blue-700">
-                      View Project Details
-                    </Link>
-                  </div>
-                </article>
-              ))}
-            </div>
-          </section>
-        )}
-
         <div className="flex flex-col gap-1 px-1 sm:flex-row sm:items-end sm:justify-between">
           <div>
-            <h2 className="text-lg font-bold text-slate-900">Verified Completed Builds</h2>
-            <p className="mt-1 text-xs text-slate-500">Homeowners can inspect your past builds when reviewing quotes.</p>
+            <h2 className="text-lg font-bold text-slate-900">Completed Builds &amp; Projects</h2>
+            <p className="mt-1 text-xs text-slate-500">Completed HomeBuildr projects and your showcased past builds appear together here.</p>
           </div>
-          <span className="text-xs font-semibold text-slate-400">{portfolioItems.length} showcase {portfolioItems.length === 1 ? 'project' : 'projects'}</span>
+          <span className="text-xs font-semibold text-slate-400">
+            {portfolioGalleryItems.length} completed {portfolioGalleryItems.length === 1 ? 'project' : 'projects'}
+          </span>
         </div>
 
         {/* Portfolio Grid */}
@@ -455,7 +399,7 @@ function ContractorPortfolioContent() {
           </div>
         ) : loadError ? (
           <div className="p-12 text-center text-xs text-red-600 bg-white rounded-2xl border border-red-200">{loadError}</div>
-        ) : portfolioItems.length === 0 ? (
+        ) : portfolioGalleryItems.length === 0 ? (
           <div className="p-16 text-center text-xs text-slate-500 bg-white rounded-2xl border border-slate-200 space-y-3">
             <Building2 className="w-12 h-12 text-slate-300 mx-auto" />
             <div className="font-bold text-slate-800 text-base">No completed projects added yet</div>
@@ -474,29 +418,65 @@ function ContractorPortfolioContent() {
           </div>
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-            {portfolioItems.map((item) => {
-              const primaryImg = portfolioImageUrls.get(item.id);
+            {portfolioGalleryItems.map(entry => {
+              if (entry.kind === 'completed') {
+                const project = entry.project;
+                return (
+                  <article key={entry.id} className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-xs transition-all hover:-translate-y-0.5 hover:shadow-md">
+                    <Link href={`/contractor/projects/${project.id}`} className="block">
+                      <div
+                        className="relative flex h-48 items-center justify-center overflow-hidden bg-slate-100 bg-cover bg-center"
+                        style={project.plan_file_path ? { backgroundImage: `url("${project.plan_file_path}")` } : undefined}
+                      >
+                        {!project.plan_file_path && (
+                          <div className="text-center text-slate-400">
+                            <Building2 className="mx-auto h-9 w-9 text-slate-300" />
+                            <span className="mt-1 block text-[11px]">Completed Build</span>
+                          </div>
+                        )}
+                        <span className="absolute right-3 top-3 inline-flex items-center gap-1 rounded-full bg-emerald-50/95 px-2.5 py-1 text-[10px] font-bold text-emerald-700 shadow-sm backdrop-blur">
+                          <CheckCircle2 className="h-3 w-3" /> HomeBuildr Project
+                        </span>
+                      </div>
+                      <div className="space-y-3 p-5">
+                        <div>
+                          <h3 className="text-base font-bold text-slate-900">{project.title}</h3>
+                          <p className="mt-1 text-xs text-slate-500">Completed in {new Date(project.updated_at).getFullYear()}</p>
+                        </div>
+                        <p className="text-xs text-slate-600">
+                          {[project.city, project.province].filter(Boolean).join(', ') || 'Location not provided'}
+                        </p>
+                        {(project.floor_area_sqm || project.floors) && (
+                          <div className="grid grid-cols-2 gap-2 border-t border-slate-100 pt-3 text-xs text-slate-600">
+                            {project.floor_area_sqm && <span><span className="text-slate-400">Area:</span> <strong className="text-slate-900">{project.floor_area_sqm} sq.m</strong></span>}
+                            {project.floors && <span><span className="text-slate-400">Floors:</span> <strong className="text-slate-900">{project.floors} Storey</strong></span>}
+                          </div>
+                        )}
+                      </div>
+                    </Link>
+                    <div className="border-t border-slate-100 bg-slate-50 p-4 text-xs">
+                      <Link href={`/contractor/projects/${project.id}`} className="font-bold text-blue-600 hover:text-blue-700">View Project Details</Link>
+                    </div>
+                  </article>
+                );
+              }
 
+              const item = entry.item;
+              const primaryImg = portfolioImageUrls.get(item.id);
               return (
-                <div
-                  key={item.id}
-                  className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-xs transition-all hover:-translate-y-0.5 hover:shadow-md flex flex-col justify-between"
-                >
+                <div key={entry.id} className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-xs transition-all hover:-translate-y-0.5 hover:shadow-md flex flex-col justify-between">
                   <div>
-                    {/* Project Image */}
-                    <div className="relative h-48 w-full overflow-hidden bg-slate-100 flex items-center justify-center">
+                    <div className="relative flex h-48 w-full items-center justify-center overflow-hidden bg-slate-100">
                       {primaryImg ? (
                         <img
                           src={primaryImg}
                           alt={item.title}
-                          className="w-full h-full object-cover"
-                          onError={(e) => {
-                            (e.target as HTMLElement).style.display = 'none';
-                          }}
+                          className="h-full w-full object-cover"
+                          onError={(e) => { (e.target as HTMLElement).style.display = 'none'; }}
                         />
                       ) : (
-                        <div className="text-center text-slate-400 p-4 space-y-1">
-                          <ImageIcon className="w-8 h-8 mx-auto text-slate-300" />
+                        <div className="space-y-1 p-4 text-center text-slate-400">
+                          <ImageIcon className="mx-auto h-8 w-8 text-slate-300" />
                           <div className="text-[11px]">Completed Build</div>
                         </div>
                       )}
@@ -504,59 +484,30 @@ function ContractorPortfolioContent() {
                         {item.house_type ? item.house_type.replace('_', ' ') : 'Residential'}
                       </span>
                     </div>
-
-                    {/* Details */}
                     <div className="space-y-3 p-5">
                       <div>
-                        <h3 className="font-bold text-slate-900 text-base">{item.title}</h3>
+                        <h3 className="text-base font-bold text-slate-900">{item.title}</h3>
                         <div className="mt-1 flex items-center gap-1.5 text-xs text-slate-400">
-                          <Calendar className="w-3.5 h-3.5 text-slate-400" />
+                          <Calendar className="h-3.5 w-3.5" />
                           <span>{item.year_completed ? `Completed in ${item.year_completed}` : 'Completion year not provided'}</span>
                         </div>
                       </div>
-
-                      {item.description && (
-                        <p className="text-xs text-slate-600 line-clamp-2 leading-relaxed">
-                          {item.description}
-                        </p>
-                      )}
-
+                      {item.description && <p className="line-clamp-2 text-xs leading-relaxed text-slate-600">{item.description}</p>}
                       <div className="grid grid-cols-2 gap-2 border-t border-slate-100 py-2 text-xs text-slate-600">
-                        {item.floor_area_sqm && (
-                          <div>
-                            <span className="text-slate-400">Area:</span> <strong className="text-slate-900">{item.floor_area_sqm} sq.m</strong>
-                          </div>
-                        )}
-                        {item.floors && (
-                          <div>
-                            <span className="text-slate-400">Floors:</span> <strong className="text-slate-900">{item.floors} Storey</strong>
-                          </div>
-                        )}
+                        {item.floor_area_sqm && <div><span className="text-slate-400">Area:</span> <strong className="text-slate-900">{item.floor_area_sqm} sq.m</strong></div>}
+                        {item.floors && <div><span className="text-slate-400">Floors:</span> <strong className="text-slate-900">{item.floors} Storey</strong></div>}
                       </div>
                     </div>
                   </div>
-
                   <div className="flex items-center justify-between border-t border-slate-100 bg-slate-50 p-4 text-xs">
-                    <span className="text-emerald-700 font-semibold flex items-center gap-1">
-                      <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
-                      Verified Showcase
+                    <span className="flex items-center gap-1 font-semibold text-emerald-700">
+                      <CheckCircle2 className="h-3.5 w-3.5 text-emerald-600" /> Verified Showcase
                     </span>
-
-                    <button
-                      type="button"
-                      onClick={() => openEditModal(item)}
-                      className="rounded-lg p-1 text-slate-400 transition-colors hover:text-blue-600"
-                      title="Edit portfolio project"
-                    >
+                    <button type="button" onClick={() => openEditModal(item)} className="rounded-lg p-1 text-slate-400 transition-colors hover:text-blue-600" title="Edit portfolio project">
                       <Pencil className="h-4 w-4" />
                     </button>
-                    <button
-                      type="button"
-                      onClick={() => handleDeleteItem(item.id, item.title)}
-                      className="rounded-lg p-1 text-slate-400 transition-colors hover:text-rose-600"
-                      title="Remove from portfolio"
-                    >
-                      <Trash2 className="w-4 h-4" />
+                    <button type="button" onClick={() => handleDeleteItem(item.id, item.title)} className="rounded-lg p-1 text-slate-400 transition-colors hover:text-rose-600" title="Remove from portfolio">
+                      <Trash2 className="h-4 w-4" />
                     </button>
                   </div>
                 </div>

@@ -8,7 +8,6 @@ import {
   ShieldCheck, 
   CheckCircle2, 
   Eye, 
-  Check, 
   X, 
   AlertCircle, 
   ArrowUpRight, 
@@ -101,6 +100,10 @@ function removeUnderscore(text: string | null | undefined): string {
   return text
     .replace(/_/g, ' ')
     .replace(/\b\w/g, char => char.toUpperCase());
+}
+
+function isPdfProof(url: string): boolean {
+  return url.toLowerCase().includes('application/pdf') || /\.pdf(?:[?#]|$)/i.test(url);
 }
 
 export default function AdminTransactionsPage() {
@@ -465,6 +468,10 @@ export default function AdminTransactionsPage() {
       setActionNotice({ text: 'Enter the actual bank or trace reference before recording the payout.', type: 'error' });
       return;
     }
+    if (!payoutProofUrl) {
+      setActionNotice({ text: 'Attach the contractor transfer proof before recording the payout.', type: 'error' });
+      return;
+    }
 
     setIsTransferring(true);
     setActionNotice(null);
@@ -814,16 +821,16 @@ export default function AdminTransactionsPage() {
                       No payments submitted yet for this project.
                     </div>
                   ) : (
-                    <table className="w-full min-w-[1020px] border-collapse text-left text-xs">
+                    <table className="w-full min-w-[1240px] table-fixed border-collapse text-left text-xs">
                       <thead>
                         <tr className="border-b border-slate-200 bg-slate-50 text-[10px] font-bold uppercase tracking-wider text-slate-500">
-                          <th className="px-5 py-3">Name of the Payer</th>
-                          <th className="px-5 py-3">Method</th>
-                          <th className="px-5 py-3">Payment For</th>
-                          <th className="px-5 py-3">Contractor</th>
-                          <th className="px-5 py-3">Amount</th>
-                          <th className="px-5 py-3">Proof</th>
-                          <th className="px-5 py-3 text-right">Action</th>
+                          <th className="w-[13%] px-4 py-3">Name of the Payer</th>
+                          <th className="w-[13%] px-4 py-3">Method</th>
+                          <th className="w-[16%] px-4 py-3">Payment For</th>
+                          <th className="w-[13%] px-4 py-3">Contractor</th>
+                          <th className="w-[14%] px-4 py-3">Amount</th>
+                          <th className="w-[13%] px-4 py-3">Proof</th>
+                          <th className="w-[18%] px-4 py-3 text-right">Action</th>
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-slate-100 text-slate-700">
@@ -876,7 +883,7 @@ export default function AdminTransactionsPage() {
                           return (
                             <tr key={groupKey} className="transition-colors hover:bg-blue-50/30">
                               {/* 1. NAME OF THE PAYER */}
-                              <td className="px-5 py-4">
+                              <td className="px-4 py-4">
                                 {multiplePayments ? (
                                   <details className="group">
                                     <summary className="cursor-pointer list-none font-bold text-slate-900">
@@ -890,7 +897,7 @@ export default function AdminTransactionsPage() {
                               </td>
 
                               {/* 2. METHOD */}
-                              <td className="px-5 py-4">
+                              <td className="px-4 py-4">
                                 {multiplePayments ? (
                                   <details className="group">
                                     <summary className="cursor-pointer list-none font-semibold text-slate-800">
@@ -904,7 +911,7 @@ export default function AdminTransactionsPage() {
                               </td>
 
                               {/* 3. PAYMENT ALLOCATION */}
-                              <td className="px-5 py-4">
+                              <td className="px-4 py-4">
                                 {paymentMilestone ? (
                                   <span className="font-medium text-slate-800">
                                     Milestone {paymentMilestone.seq}: {paymentMilestone.name}
@@ -915,12 +922,12 @@ export default function AdminTransactionsPage() {
                               </td>
 
                               {/* 4. CONTRACTOR */}
-                              <td className="px-5 py-4">
+                              <td className="px-4 py-4">
                                 <div className="font-medium text-slate-800">{proj.contractorName}</div>
                               </td>
 
                               {/* 5. AMOUNT */}
-                              <td className="px-5 py-4 font-mono text-sm font-black text-slate-900">
+                              <td className="px-4 py-4 font-mono text-sm font-black text-slate-900">
                                 {multiplePayments ? (
                                   <details>
                                     <summary className="cursor-pointer list-none">
@@ -941,7 +948,7 @@ export default function AdminTransactionsPage() {
                               </td>
 
                               {/* 6. PROOF */}
-                              <td className="px-5 py-4">
+                              <td className="px-4 py-4">
                                 {multiplePayments ? (
                                   <details>
                                     <summary className="cursor-pointer list-none rounded-lg bg-blue-50 px-2.5 py-1 font-bold text-[11px] text-blue-700 hover:bg-blue-100">
@@ -979,20 +986,20 @@ export default function AdminTransactionsPage() {
                               </td>
 
                               {/* 7. ACTION */}
-                              <td className="px-5 py-4 text-right">
-                                {multiplePayments ? (
-                                  <details className="text-left">
-                                    <summary className="inline-block cursor-pointer list-none rounded-lg border border-slate-200 bg-slate-50 px-2.5 py-1.5 text-[10px] font-bold text-slate-700">
-                                      Actions ({payments.length}) ▾
-                                    </summary>
-                                    <div className="ml-auto mt-2 max-h-72 w-80 max-w-full space-y-2 overflow-y-auto rounded-xl border border-slate-200 bg-white p-2 text-left shadow-xl">
-                                      {paymentStatuses.map(({ payment, pending, paid, rejected }, index) => (
-                                        <div key={payment.id} className="flex items-center justify-between gap-2 rounded-lg border border-slate-100 p-2">
+                              <td className="px-4 py-4">
+                                <details className="group">
+                                  <summary className="ml-auto block w-fit cursor-pointer list-none rounded-lg border border-slate-200 bg-white px-3 py-2 text-[10px] font-bold text-slate-700 shadow-xs transition hover:border-blue-200 hover:bg-blue-50">
+                                    Actions ({payments.length}) <span className="text-blue-600">▾</span>
+                                  </summary>
+                                  <div className="ml-auto mt-2 max-h-80 w-80 max-w-full space-y-2 overflow-y-auto rounded-xl border border-slate-200 bg-white p-2 text-left shadow-xl">
+                                    {paymentStatuses.map(({ payment, pending, paid, rejected }, index) => (
+                                      <div key={payment.id} className="space-y-2 rounded-xl border border-slate-200 bg-slate-50/70 p-3">
+                                        <div className="flex items-start justify-between gap-2">
                                           <div className="min-w-0">
-                                            <div className="truncate text-[10px] font-semibold text-slate-700">
+                                            <div className="truncate text-[11px] font-bold text-slate-800">
                                               Payment {index + 1} · ₱{((payment.amount_centavos || 0) / 100).toLocaleString('en-US', { maximumFractionDigits: 0 })}
                                             </div>
-                                            <div className="text-[9px] text-slate-400">{removeUnderscore(payment.payment_status)}</div>
+                                            <div className="mt-0.5 text-[10px] text-slate-500">{removeUnderscore(payment.payment_status)}</div>
                                           </div>
                                           {pending ? (
                                             <div className="flex shrink-0 gap-1">
@@ -1000,75 +1007,52 @@ export default function AdminTransactionsPage() {
                                               <button type="button" onClick={() => { setRejectingTx(payment); setRejectionReason(''); }} className="rounded-lg border border-red-200 bg-red-50 px-2 py-1 text-[10px] font-semibold text-red-700 hover:bg-red-100">Reject</button>
                                             </div>
                                           ) : paid && (payment.payout_status === 'PAID' || milestonePayout) ? (
-                                            <div className="flex shrink-0 items-center gap-1">
-                                              <span className="text-[10px] font-bold text-emerald-700">Transferred</span>
-                                              {payment.payout_proof_url && (
-                                                <button type="button" onClick={() => setInspectingPayoutProof({
-                                                  url: payment.payout_proof_url!,
-                                                  ref: payment.payout_tx_ref || 'DISBURSE-REF',
-                                                  contractor: proj.contractorName,
-                                                  amount: (payment.amount_centavos || 0) / 100,
-                                                  method: payment.payment_method,
-                                                  date: new Date().toISOString(),
-                                                })} className="rounded-lg bg-indigo-50 px-2 py-1 text-[10px] font-bold text-indigo-700 hover:bg-indigo-100">Proof</button>
-                                              )}
-                                            </div>
+                                            <span className="shrink-0 text-[10px] font-bold text-emerald-700">Transferred</span>
                                           ) : rejected ? (
-                                            <span className="text-[10px] font-semibold text-red-600">Declined</span>
+                                            <span className="shrink-0 text-[10px] font-semibold text-red-600">Declined</span>
                                           ) : paid ? (
-                                            <span className="text-right text-[9px] font-semibold text-slate-500">
-                                              {paymentMilestone?.status === 'approved' ? 'Ready for project transfer' : paymentMilestone ? 'Awaiting milestone approval' : 'Held in project vault'}
+                                            <span className="max-w-32 text-right text-[9px] font-semibold text-slate-500">
+                                              {paymentMilestone?.status === 'approved' ? 'Ready for transfer' : paymentMilestone ? 'Awaiting milestone approval' : 'Held in vault'}
                                             </span>
                                           ) : (
-                                            <span className="text-[10px] font-semibold text-slate-400">Awaiting verification</span>
+                                            <span className="shrink-0 text-[10px] font-semibold text-slate-400">Awaiting verification</span>
                                           )}
                                         </div>
-                                      ))}
-                                    </div>
-                                  </details>
-                                ) : (() => {
-                                  const { pending, paid, rejected } = paymentStatuses[0];
-                                  if (pending) {
-                                    return (
-                                      <div className="inline-flex items-center gap-1.5 justify-end">
-                                        <button type="button" onClick={() => setReviewingTx(tx)} className="px-3 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs shadow-xs transition flex items-center gap-1">
-                                          <Check className="w-3.5 h-3.5" /><span>Review &amp; Approve</span>
-                                        </button>
-                                        <button type="button" onClick={() => { setRejectingTx(tx); setRejectionReason(''); }} className="px-2.5 py-1.5 rounded-xl bg-red-50 hover:bg-red-100 text-red-700 font-semibold text-xs border border-red-200 transition">Reject</button>
+                                        <div className="flex flex-wrap gap-1.5 border-t border-slate-200 pt-2">
+                                          {payment.proof_file_url ? (
+                                            <button
+                                              type="button"
+                                              onClick={() => setInspectorSlipUrl(payment.proof_file_url || null)}
+                                              className="inline-flex items-center gap-1 rounded-lg bg-blue-50 px-2 py-1 text-[10px] font-bold text-blue-700 hover:bg-blue-100"
+                                            >
+                                              <Eye className="h-3 w-3" /> Payment Proof
+                                            </button>
+                                          ) : (
+                                            <span className="rounded-lg bg-red-50 px-2 py-1 text-[10px] font-semibold text-red-600">Payment proof missing</span>
+                                          )}
+                                          {payment.payout_proof_url ? (
+                                            <button
+                                              type="button"
+                                              onClick={() => setInspectingPayoutProof({
+                                                url: payment.payout_proof_url!,
+                                                ref: payment.payout_tx_ref || 'DISBURSE-REF',
+                                                contractor: proj.contractorName,
+                                                amount: (payment.amount_centavos || 0) / 100,
+                                                method: payment.payment_method,
+                                                date: new Date().toISOString(),
+                                              })}
+                                              className="inline-flex items-center gap-1 rounded-lg bg-indigo-50 px-2 py-1 text-[10px] font-bold text-indigo-700 hover:bg-indigo-100"
+                                            >
+                                              <Eye className="h-3 w-3" /> Transfer Proof
+                                            </button>
+                                          ) : (payment.payout_status === 'PAID' || (paid && milestonePayout)) ? (
+                                            <span className="rounded-lg bg-amber-50 px-2 py-1 text-[10px] font-semibold text-amber-700">Transfer proof missing</span>
+                                          ) : null}
+                                        </div>
                                       </div>
-                                    );
-                                  }
-                                  if (paid && (tx.payout_status === 'PAID' || milestonePayout)) {
-                                    return (
-                                      <div className="inline-flex items-center gap-1.5 justify-end">
-                                        <span className="px-2.5 py-1 rounded-xl bg-slate-100 text-slate-700 font-bold text-xs flex items-center gap-1 border border-slate-200">
-                                          <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" /><span>Transferred</span>
-                                        </span>
-                                        {tx.payout_proof_url && (
-                                          <button type="button" onClick={() => setInspectingPayoutProof({
-                                            url: tx.payout_proof_url!,
-                                            ref: tx.payout_tx_ref || 'DISBURSE-REF',
-                                            contractor: proj.contractorName,
-                                            amount: (tx.amount_centavos || 0) / 100,
-                                            method: tx.payment_method,
-                                            date: new Date().toISOString(),
-                                          })} className="px-2.5 py-1 rounded-lg bg-indigo-50 hover:bg-indigo-100 text-indigo-700 text-[10px] font-bold border border-indigo-200 transition flex items-center gap-1" title="View proof sent to contractor">
-                                            <Eye className="w-3 h-3" /><span>Proof</span>
-                                          </button>
-                                        )}
-                                      </div>
-                                    );
-                                  }
-                                  if (rejected) return <span className="text-red-600 text-xs font-semibold italic">Declined (Unpaid)</span>;
-                                  if (paid) {
-                                    return (
-                                      <span className="text-[11px] font-semibold text-slate-400">
-                                        {paymentMilestone?.status === 'approved' ? 'Ready for project transfer' : paymentMilestone ? 'Awaiting milestone approval' : 'Held in project vault'}
-                                      </span>
-                                    );
-                                  }
-                                  return null;
-                                })()}
+                                    ))}
+                                  </div>
+                                </details>
                               </td>
                             </tr>
                           );
@@ -1500,7 +1484,7 @@ export default function AdminTransactionsPage() {
               </div>
 
               <div className="space-y-1.5">
-                <label className="font-bold text-slate-700">Attach Transfer Proof Receipt</label>
+                <label className="font-bold text-slate-700">Attach Transfer Proof Receipt *</label>
                 <div className="border-2 border-dashed border-slate-200 hover:border-blue-400 rounded-2xl p-4 text-center transition bg-slate-50/50">
                   <input
                     type="file"
@@ -1553,9 +1537,9 @@ export default function AdminTransactionsPage() {
               </button>
               <button
                 type="button"
-                disabled={isTransferring || payoutAccountsLoading || Boolean(payoutAccountsError)}
+                disabled={isTransferring || payoutAccountsLoading || Boolean(payoutAccountsError) || !payoutProofUrl}
                 onClick={handleExecuteContractorPayout}
-                className="px-5 py-2 rounded-xl bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white font-bold text-xs shadow-md transition flex items-center gap-1.5"
+                className="px-5 py-2 rounded-xl bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white font-bold text-xs shadow-md transition flex items-center gap-1.5 disabled:cursor-not-allowed disabled:opacity-50"
               >
                 {isTransferring ? 'Processing...' : 'Confirm & Disburse to Contractor'}
               </button>
@@ -1577,12 +1561,18 @@ export default function AdminTransactionsPage() {
                 <X className="w-5 h-5" />
               </button>
             </div>
-            <div className="p-4 bg-slate-100 flex items-center justify-center max-h-[70vh] overflow-auto">
-              <img
-                src={inspectorSlipUrl}
-                alt="Deposit Slip Proof"
-                className="max-h-[65vh] w-auto object-contain rounded-xl shadow-xs"
-              />
+            <div className="h-[70vh] bg-slate-100 p-4">
+              {isPdfProof(inspectorSlipUrl) ? (
+                <iframe src={inspectorSlipUrl} title="Homeowner payment proof" className="h-full w-full rounded-xl bg-white" />
+              ) : (
+                <div className="flex h-full items-center justify-center overflow-auto">
+                  <img
+                    src={inspectorSlipUrl}
+                    alt="Deposit Slip Proof"
+                    className="max-h-full w-auto rounded-xl object-contain shadow-xs"
+                  />
+                </div>
+              )}
             </div>
             <div className="p-3 bg-slate-50 border-t border-slate-100 flex items-center justify-end">
               <button
@@ -1636,12 +1626,18 @@ export default function AdminTransactionsPage() {
 
               <div>
                 <div className="text-xs font-bold text-slate-700 mb-2">Attached Bank / E-Wallet Proof Receipt</div>
-                <div className="border border-slate-200 rounded-2xl overflow-hidden bg-slate-100 max-h-80 flex items-center justify-center relative">
-                  <img
-                    src={inspectingPayoutProof.url}
-                    alt="Disbursement Transfer Proof"
-                    className="w-full h-auto max-h-80 object-contain mx-auto"
-                  />
+                <div className="h-80 overflow-hidden rounded-2xl border border-slate-200 bg-slate-100">
+                  {isPdfProof(inspectingPayoutProof.url) ? (
+                    <iframe src={inspectingPayoutProof.url} title="Contractor transfer proof" className="h-full w-full bg-white" />
+                  ) : (
+                    <div className="flex h-full items-center justify-center">
+                      <img
+                        src={inspectingPayoutProof.url}
+                        alt="Disbursement Transfer Proof"
+                        className="max-h-full w-full object-contain"
+                      />
+                    </div>
+                  )}
                 </div>
               </div>
             </div>
