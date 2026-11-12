@@ -408,7 +408,6 @@ export default function ContractorPaymentsPage() {
                 <table className="w-full text-left border-collapse text-xs">
                   <thead>
                     <tr className="bg-slate-50 border-b border-slate-200 text-slate-500 uppercase tracking-wider font-semibold">
-                      <th className="py-3 px-4">Transaction Ref</th>
                       <th className="py-3 px-4">Channel / Provider</th>
                       <th className="py-3 px-4">Payer Name</th>
                       <th className="py-3 px-4">Bank Trace Ref #</th>
@@ -421,7 +420,7 @@ export default function ContractorPaymentsPage() {
                     {groupByProject(homeownerSubmissions).map(({ projectId, records }) => (
                       <React.Fragment key={projectId || 'unassigned'}>
                         <tr className="bg-blue-50/70 text-slate-800">
-                          <th colSpan={7} className="px-4 py-2.5 text-left font-bold">
+                          <th colSpan={6} className="px-4 py-2.5 text-left font-bold">
                             Project: {projectTitles[projectId] || (projectId ? 'Project details unavailable' : 'Unassigned project')}
                           </th>
                         </tr>
@@ -433,9 +432,6 @@ export default function ContractorPaymentsPage() {
 
                           return (
                             <tr key={tx.id || tx.transaction_ref} className="hover:bg-slate-50/50">
-                          <td className="py-3.5 px-4 font-mono font-bold text-slate-900">
-                            {tx.transaction_ref}
-                          </td>
                           <td className="py-3.5 px-4 font-medium capitalize">
                             {tx.provider || tx.payment_method.replace('_', ' ')}
                           </td>
@@ -494,11 +490,6 @@ export default function ContractorPaymentsPage() {
                                 </button>
                               )}
                             </div>
-                            {tx.payout_tx_ref && (
-                              <div className="text-[10px] font-mono text-slate-500 mt-0.5">
-                                Transfer Ref: {tx.payout_tx_ref}
-                              </div>
-                            )}
                           </td>
                             </tr>
                           );

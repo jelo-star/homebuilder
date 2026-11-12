@@ -33,7 +33,10 @@ interface ProjectSafekeepingSummary {
   status: string;
 }
 
-type MilestonePayoutInfo = Pick<Milestone, 'id' | 'project_id' | 'seq' | 'name' | 'amount' | 'status'>;
+type MilestonePayoutInfo = Pick<
+  Milestone,
+  'id' | 'project_id' | 'seq' | 'name' | 'amount' | 'status' | 'platform_commission_amount' | 'homeowner_total_amount'
+>;
 type ProjectPayoutSummary = Pick<Payout, 'project_id' | 'milestone_id' | 'gross_amount' | 'status'>;
 
 const PROJECTS_PER_PAGE = 20;
@@ -312,7 +315,7 @@ export default function AdminTransactionsPage() {
         }
         const { data: milestoneRows, error: milestonesError } = await supabase
           .from('milestones')
-          .select('id, project_id, seq, name, amount, status')
+          .select('id, project_id, seq, name, amount, status, platform_commission_amount, homeowner_total_amount')
           .in('project_id', pagedProjectIds);
         if (milestonesError) throw milestonesError;
         const { data: payoutRows, error: payoutsError } = await supabase
@@ -495,16 +498,44 @@ export default function AdminTransactionsPage() {
       });
       if (payoutError) throw payoutError;
 
-      setTransactions(prev => prev.map(t =>
-        t.id === transferringTx.id || (t.project_id === transferringTx.project_id && t.milestone_id === approvedMilestone.id)
-          ? {
-              ...t,
-              payout_status: 'PAID',
-              payout_tx_ref: disburseRef,
-              payout_proof_url: payoutProofUrl || null,
-            }
-          : t
-      ));
+      const releaseAmount = Math.max(
+        approvedMilestone.amount + (approvedMilestone.platform_commission_amount || 0),
+        approvedMilestone.homeowner_total_amount || approvedMilestone.amount,
+      );
+      const sourceTransactions = (transactionsByProject.get(transferringTx.project_id) || [])
+        .filter(tx =>
+          (tx.payment_status === 'PAID' || tx.payment_status === 'SUCCEEDED')
+          && tx.recipient_id === transferringTx.recipient_id
+          && (tx.milestone_id === approvedMilestone.id || tx.milestone_id === null)
+        )
+        .sort((a, b) => {
+          const aIsMilestonePayment = a.milestone_id === approvedMilestone.id;
+          const bIsMilestonePayment = b.milestone_id === approvedMilestone.id;
+          if (aIsMilestonePayment !== bIsMilestonePayment) return aIsMilestonePayment ? -1 : 1;
+          return a.created_at.localeCompare(b.created_at) || a.id.localeCompare(b.id);
+        });
+      const releasedFundingIds = new Set<string>();
+      let allocatedFunding = 0;
+      for (const transaction of sourceTransactions) {
+        if (allocatedFunding >= releaseAmount) break;
+        releasedFundingIds.add(transaction.id);
+        allocatedFunding += Number(transaction.verified_amount ?? (transaction.amount_centavos || 0) / 100);
+      }
+
+      setTransactions(prev => prev.map(transaction => {
+        const isPayoutSource = releasedFundingIds.has(transaction.id);
+        const isPayoutRecord = transaction.id === transferringTx.id;
+        if (!isPayoutSource && !isPayoutRecord) return transaction;
+
+        return {
+          ...transaction,
+          payout_status: 'PAID',
+          ...(isPayoutRecord ? {
+            payout_tx_ref: disburseRef,
+            payout_proof_url: payoutProofUrl || null,
+          } : {}),
+        };
+      }));
       setMilestonesById(prev => new Map(prev).set(approvedMilestone.id, { ...approvedMilestone, status: 'paid' }));
       const commissionPercent = projectsById.get(transferringTx.project_id)?.commissionPercent || 0;
       const feeAmount = Math.round(numericAmount * commissionPercent) / 100;
