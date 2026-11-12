@@ -28,7 +28,6 @@ interface ProjectSafekeepingSummary {
   homeownerName: string;
   contractorName: string;
   contractPrice: number;
-  commissionPercent: number;
   status: string;
 }
 
@@ -36,7 +35,10 @@ type MilestonePayoutInfo = Pick<
   Milestone,
   'id' | 'project_id' | 'seq' | 'name' | 'amount' | 'status' | 'platform_commission_amount' | 'homeowner_total_amount'
 >;
-type ProjectPayoutSummary = Pick<Payout, 'project_id' | 'milestone_id' | 'gross_amount' | 'status'>;
+type ProjectPayoutSummary = Pick<
+  Payout,
+  'project_id' | 'milestone_id' | 'contractor_id' | 'gross_amount' | 'net_amount' | 'status' | 'provider_ref' | 'payout_method' | 'sent_at'
+> & { proof_file_url?: string | null };
 
 const PROJECTS_PER_PAGE = 20;
 const QUERY_PAGE_SIZE = 500;
@@ -253,7 +255,6 @@ export default function AdminTransactionsPage() {
           homeownerName: p.profiles?.full_name || '—',
           contractorName,
           contractPrice: Number(p.homeowner_total_amount) || contractPrice,
-          commissionPercent: Number(p.platform_commission_percent) || 0,
           status: p.status || 'in_progress'
         }];
       });
@@ -323,7 +324,7 @@ export default function AdminTransactionsPage() {
         if (milestonesError) throw milestonesError;
         const { data: payoutRows, error: payoutsError } = await supabase
           .from('payouts')
-          .select('project_id, milestone_id, gross_amount, status')
+          .select('project_id, milestone_id, contractor_id, gross_amount, net_amount, status, provider_ref, payout_method, proof_file_url, sent_at')
           .in('project_id', pagedProjectIds);
         if (payoutsError) throw payoutsError;
         if (!cancelled) {
@@ -387,19 +388,66 @@ export default function AdminTransactionsPage() {
     Number(tx.verified_amount ?? (tx.amount_centavos || 0) / 100);
 
   const getFundingTransaction = (
-    projectId: string,
     milestoneId: string,
     projectTransactions: PaymentTransactionRecord[]
-  ) => projectTransactions.find(tx =>
-    tx.payment_status === 'PAID'
+  ) => {
+    const eligible = projectTransactions.filter(tx =>
+    (tx.payment_status === 'PAID' || tx.payment_status === 'SUCCEEDED')
     && Boolean(tx.recipient_id)
     && (tx.milestone_id === milestoneId || tx.milestone_id === null)
-  ) || null;
+    );
+    return eligible.find(tx => tx.milestone_id === milestoneId) || eligible[0] || null;
+  };
+
+  const getMilestoneTransferAmount = (
+    milestone: MilestonePayoutInfo,
+    projectTransactions: PaymentTransactionRecord[],
+  ) => {
+    const assignedPayments = projectTransactions.filter(tx =>
+      tx.milestone_id === milestone.id
+      && Boolean(tx.recipient_id)
+      && (tx.payment_status === 'PAID' || tx.payment_status === 'SUCCEEDED')
+    );
+    const recipientId = assignedPayments[0]?.recipient_id;
+    return recipientId
+      ? assignedPayments
+        .filter(tx => tx.recipient_id === recipientId)
+        .reduce((total, tx) => total + getVerifiedPaymentAmount(tx), 0)
+      : milestone.amount;
+  };
+
+  const isPaymentCoveredByPayout = (
+    payment: PaymentTransactionRecord,
+    payout: ProjectPayoutSummary,
+    projectTransactions: PaymentTransactionRecord[],
+  ) => {
+    if (payout.status !== 'sent' || !payout.milestone_id) return false;
+    const payoutFunding = projectTransactions
+      .filter(tx =>
+        tx.recipient_id === payout.contractor_id
+        && (tx.payment_status === 'PAID' || tx.payment_status === 'SUCCEEDED')
+        && (tx.milestone_id === payout.milestone_id || tx.milestone_id === null)
+      )
+      .sort((a, b) => {
+        const aIsMilestonePayment = a.milestone_id === payout.milestone_id;
+        const bIsMilestonePayment = b.milestone_id === payout.milestone_id;
+        if (aIsMilestonePayment !== bIsMilestonePayment) return aIsMilestonePayment ? -1 : 1;
+        return a.created_at.localeCompare(b.created_at) || a.id.localeCompare(b.id);
+      });
+
+    let allocatedAmount = 0;
+    for (const transaction of payoutFunding) {
+      if (allocatedAmount >= Number(payout.gross_amount)) break;
+      if (transaction.id === payment.id) return true;
+      allocatedAmount += getVerifiedPaymentAmount(transaction);
+    }
+    return false;
+  };
 
   const openTransferModal = (projectId: string, milestone: MilestonePayoutInfo) => {
     if (milestone.status !== 'approved') return;
     const projectTransactions = transactionsByProject.get(projectId) || [];
-    const fundingTransaction = getFundingTransaction(projectId, milestone.id, projectTransactions);
+    const fundingTransaction = getFundingTransaction(milestone.id, projectTransactions);
     if (!fundingTransaction) {
       setActionNotice({
         text: 'No verified homeowner payment is available to fund this approved milestone.',
@@ -410,7 +458,7 @@ export default function AdminTransactionsPage() {
     setProjectTransferViewId(null);
     setTransferringTx(fundingTransaction);
     setTransferringMilestoneId(milestone.id);
-    setTransferAmount(milestone.amount.toString());
+    setTransferAmount(getMilestoneTransferAmount(milestone, projectTransactions).toString());
     setTransferMethod('bank_transfer');
     setContractorPayoutAccounts([]);
     setSelectedPayoutAccountId('');
@@ -481,11 +529,14 @@ export default function AdminTransactionsPage() {
       const approvedMilestone = transferringMilestoneId
         ? milestonesById.get(transferringMilestoneId)
         : null;
-      if (!transferringTx.project_id || !transferringTx.recipient_id || !approvedMilestone || approvedMilestone.project_id !== transferringTx.project_id || approvedMilestone.status !== 'approved') {
+      const payoutContractorId = transferringTx.recipient_id;
+      if (!transferringTx.project_id || !payoutContractorId || !approvedMilestone || approvedMilestone.project_id !== transferringTx.project_id || approvedMilestone.status !== 'approved') {
         throw new Error('Only verified funds for an approved milestone can be transferred to the contractor.');
       }
-      if (Math.abs(numericAmount - approvedMilestone.amount) > 0.005) {
-        throw new Error(`The transfer amount must match the approved milestone amount (${approvedMilestone.amount.toLocaleString('en-US')}).`);
+      const projectTransactions = transactionsByProject.get(transferringTx.project_id) || [];
+      const milestoneTransferAmount = getMilestoneTransferAmount(approvedMilestone, projectTransactions);
+      if (Math.abs(numericAmount - milestoneTransferAmount) > 0.005) {
+        throw new Error(`The transfer amount must match the verified payments attached to this milestone (${milestoneTransferAmount.toLocaleString('en-US')}).`);
       }
       if (payoutAccountsLoading) throw new Error('Wait for the contractor payout details to finish loading.');
       if (payoutAccountsError) throw new Error(`Could not load the contractor payout details: ${payoutAccountsError}`);
@@ -506,13 +557,13 @@ export default function AdminTransactionsPage() {
       if (payoutError) throw payoutError;
 
       const releaseAmount = Math.max(
-        approvedMilestone.amount + (approvedMilestone.platform_commission_amount || 0),
-        approvedMilestone.homeowner_total_amount || approvedMilestone.amount,
+        numericAmount + (approvedMilestone.platform_commission_amount || 0),
+        approvedMilestone.homeowner_total_amount || numericAmount,
       );
-      const sourceTransactions = (transactionsByProject.get(transferringTx.project_id) || [])
+      const sourceTransactions = projectTransactions
         .filter(tx =>
           (tx.payment_status === 'PAID' || tx.payment_status === 'SUCCEEDED')
-          && tx.recipient_id === transferringTx.recipient_id
+          && tx.recipient_id === payoutContractorId
           && (tx.milestone_id === approvedMilestone.id || tx.milestone_id === null)
         )
         .sort((a, b) => {
@@ -544,11 +595,24 @@ export default function AdminTransactionsPage() {
         };
       }));
       setMilestonesById(prev => new Map(prev).set(approvedMilestone.id, { ...approvedMilestone, status: 'paid' }));
-      const commissionPercent = projectsById.get(transferringTx.project_id)?.commissionPercent || 0;
-      const feeAmount = Math.round(numericAmount * commissionPercent) / 100;
+      const grossAmount = Math.max(
+        numericAmount + (approvedMilestone.platform_commission_amount || 0),
+        approvedMilestone.homeowner_total_amount || numericAmount,
+      );
       setProjectPayouts(prev => [
         ...prev,
-        { project_id: transferringTx.project_id, milestone_id: approvedMilestone.id, gross_amount: numericAmount + feeAmount, status: 'sent' },
+        {
+          project_id: transferringTx.project_id,
+          milestone_id: approvedMilestone.id,
+          contractor_id: payoutContractorId,
+          gross_amount: grossAmount,
+          net_amount: numericAmount,
+          status: 'sent',
+          provider_ref: disburseRef,
+          payout_method: payoutMethod,
+          proof_file_url: payoutProofUrl,
+          sent_at: new Date().toISOString(),
+        },
       ]);
       setTransferringTx(null);
       setTransferringMilestoneId(null);
@@ -842,7 +906,7 @@ export default function AdminTransactionsPage() {
                             ? projPayoutRows.find(payout => payout.milestone_id === paymentMilestone.id)
                             : null;
                           const totalAmount = payments.reduce(
-                            (total, payment) => total + (payment.amount_centavos || 0) / 100,
+                            (total, payment) => total + getVerifiedPaymentAmount(payment),
                             0,
                           );
                           const multiplePayments = payments.length > 1;
@@ -877,7 +941,10 @@ export default function AdminTransactionsPage() {
                             const pending = ['PENDING_VERIFICATION', 'PENDING', 'CREATED'].includes(payment.payment_status);
                             const paid = payment.payment_status === 'PAID' || payment.payment_status === 'SUCCEEDED';
                             const rejected = payment.payment_status === 'REJECTED';
-                            return { payment, pending, paid, rejected };
+                            const transferred = milestonePayout
+                              ? isPaymentCoveredByPayout(payment, milestonePayout, projTxs)
+                              : payment.payout_status === 'PAID';
+                            return { payment, pending, paid, rejected, transferred };
                           });
 
                           return (
@@ -943,7 +1010,7 @@ export default function AdminTransactionsPage() {
                                     </div>
                                   </details>
                                 ) : (
-                                  `₱${((tx.amount_centavos || 0) / 100).toLocaleString('en-US', { maximumFractionDigits: 0 })}`
+                                  `₱${getVerifiedPaymentAmount(tx).toLocaleString('en-US', { maximumFractionDigits: 0 })}`
                                 )}
                               </td>
 
@@ -992,7 +1059,7 @@ export default function AdminTransactionsPage() {
                                     Actions ({payments.length}) <span className="text-blue-600">▾</span>
                                   </summary>
                                   <div className="ml-auto mt-2 max-h-80 w-80 max-w-full space-y-2 overflow-y-auto rounded-xl border border-slate-200 bg-white p-2 text-left shadow-xl">
-                                    {paymentStatuses.map(({ payment, pending, paid, rejected }, index) => (
+                                    {paymentStatuses.map(({ payment, pending, paid, rejected, transferred }, index) => (
                                       <div key={payment.id} className="space-y-2 rounded-xl border border-slate-200 bg-slate-50/70 p-3">
                                         <div className="flex items-start justify-between gap-2">
                                           <div className="min-w-0">
@@ -1006,8 +1073,10 @@ export default function AdminTransactionsPage() {
                                               <button type="button" onClick={() => setReviewingTx(payment)} className="rounded-lg bg-emerald-600 px-2 py-1 text-[10px] font-bold text-white hover:bg-emerald-700">Review</button>
                                               <button type="button" onClick={() => { setRejectingTx(payment); setRejectionReason(''); }} className="rounded-lg border border-red-200 bg-red-50 px-2 py-1 text-[10px] font-semibold text-red-700 hover:bg-red-100">Reject</button>
                                             </div>
-                                          ) : paid && (payment.payout_status === 'PAID' || milestonePayout) ? (
+                                          ) : transferred ? (
                                             <span className="shrink-0 text-[10px] font-bold text-emerald-700">Transferred</span>
+                                          ) : paid && milestonePayout ? (
+                                            <span className="max-w-32 text-right text-[9px] font-semibold text-amber-700">Not included in recorded transfer</span>
                                           ) : rejected ? (
                                             <span className="shrink-0 text-[10px] font-semibold text-red-600">Declined</span>
                                           ) : paid ? (
@@ -1030,22 +1099,22 @@ export default function AdminTransactionsPage() {
                                           ) : (
                                             <span className="rounded-lg bg-red-50 px-2 py-1 text-[10px] font-semibold text-red-600">Payment proof missing</span>
                                           )}
-                                          {payment.payout_proof_url ? (
+                                          {transferred && (payment.payout_proof_url || milestonePayout?.proof_file_url) ? (
                                             <button
                                               type="button"
                                               onClick={() => setInspectingPayoutProof({
-                                                url: payment.payout_proof_url!,
-                                                ref: payment.payout_tx_ref || 'DISBURSE-REF',
+                                                url: payment.payout_proof_url || milestonePayout?.proof_file_url || '',
+                                                ref: payment.payout_tx_ref || milestonePayout?.provider_ref || 'DISBURSE-REF',
                                                 contractor: proj.contractorName,
-                                                amount: (payment.amount_centavos || 0) / 100,
-                                                method: payment.payment_method,
-                                                date: new Date().toISOString(),
+                                                amount: Number(milestonePayout?.net_amount ?? getVerifiedPaymentAmount(payment)),
+                                                method: milestonePayout?.payout_method || payment.payout_method || payment.payment_method,
+                                                date: milestonePayout?.sent_at || payment.payout_released_at || null,
                                               })}
                                               className="inline-flex items-center gap-1 rounded-lg bg-indigo-50 px-2 py-1 text-[10px] font-bold text-indigo-700 hover:bg-indigo-100"
                                             >
                                               <Eye className="h-3 w-3" /> Transfer Proof
                                             </button>
-                                          ) : (payment.payout_status === 'PAID' || (paid && milestonePayout)) ? (
+                                          ) : transferred ? (
                                             <span className="rounded-lg bg-amber-50 px-2 py-1 text-[10px] font-semibold text-amber-700">Transfer proof missing</span>
                                           ) : null}
                                         </div>
@@ -1142,7 +1211,7 @@ export default function AdminTransactionsPage() {
                 </div>
 
                 <p className="rounded-xl border border-blue-100 bg-blue-50 p-3 text-[11px] leading-relaxed text-blue-800">
-                  Each approved milestone is transferred once for its full milestone amount, even when the homeowner paid in multiple transactions. Full-project payments remain in the vault until an approved milestone is ready.
+                  Verified payments assigned to an approved milestone are combined into one transfer. If no payments are assigned directly to the milestone, the approved milestone amount is used. Full-project payments remain in the vault until an approved milestone is ready.
                 </p>
 
                 <section className="space-y-2">
@@ -1158,7 +1227,7 @@ export default function AdminTransactionsPage() {
                           <tr>
                             <th className="px-4 py-3">Milestone</th>
                             <th className="px-4 py-3">Approval status</th>
-                            <th className="px-4 py-3 text-right">Milestone total</th>
+                            <th className="px-4 py-3 text-right">Transfer amount</th>
                             <th className="px-4 py-3 text-right">Action</th>
                           </tr>
                         </thead>
@@ -1166,11 +1235,18 @@ export default function AdminTransactionsPage() {
                           {projectMilestones.map(milestone => {
                             const payout = projectPayoutRows.find(row => row.milestone_id === milestone.id);
                             const fundingTransaction = getFundingTransaction(
-                              projectTransferViewId,
                               milestone.id,
                               transferProjectTransactions
                             );
-                            const canTransfer = milestone.status === 'approved' && !payout && Boolean(fundingTransaction);
+                            const transferAmount = getMilestoneTransferAmount(milestone, transferProjectTransactions);
+                            const requiredMilestoneFunding = Math.max(
+                              milestone.amount + (milestone.platform_commission_amount || 0),
+                              milestone.homeowner_total_amount || milestone.amount,
+                            );
+                            const canTransfer = milestone.status === 'approved'
+                              && !payout
+                              && Boolean(fundingTransaction)
+                              && transferAmount >= requiredMilestoneFunding;
                             return (
                               <tr key={milestone.id}>
                                 <td className="px-4 py-3 font-semibold text-slate-800">
@@ -1180,7 +1256,7 @@ export default function AdminTransactionsPage() {
                                   {payout ? 'Transferred' : removeUnderscore(milestone.status)}
                                 </td>
                                 <td className="px-4 py-3 text-right font-mono font-bold text-slate-900">
-                                  ₱{milestone.amount.toLocaleString('en-US', { maximumFractionDigits: 2 })}
+                                  ₱{transferAmount.toLocaleString('en-US', { maximumFractionDigits: 2 })}
                                 </td>
                                 <td className="px-4 py-3 text-right">
                                   {canTransfer ? (
@@ -1197,7 +1273,7 @@ export default function AdminTransactionsPage() {
                                       {payout
                                         ? 'Already transferred'
                                         : milestone.status === 'approved'
-                                        ? 'Awaiting verified funds'
+                                        ? 'Awaiting full verified milestone funds'
                                         : 'Awaiting approval'}
                                     </span>
                                   )}
@@ -1412,7 +1488,7 @@ export default function AdminTransactionsPage() {
                 </div>
                 {transferringMilestoneId && (
                   <p className="text-[10px] text-slate-500">
-                    This transfer is for the full approved milestone amount and can only be recorded once.
+                    This combines all verified payments assigned to the milestone and can only be recorded once.
                   </p>
                 )}
               </div>
