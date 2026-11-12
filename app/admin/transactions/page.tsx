@@ -712,6 +712,15 @@ export default function AdminTransactionsPage() {
           pagedProjects.map((proj) => {
             // Transactions strictly belonging to this project
             const projTxs = transactionsByProject.get(proj.id) || [];
+            const paymentGroups = new Map<string, PaymentTransactionRecord[]>();
+            for (const transaction of projTxs) {
+              const groupKey = transaction.milestone_id
+                ? `milestone:${transaction.milestone_id}`
+                : `payment:${transaction.id}`;
+              const group = paymentGroups.get(groupKey) || [];
+              group.push(transaction);
+              paymentGroups.set(groupKey, group);
+            }
             const projPayoutRows = payoutsByProject.get(proj.id) || [];
             const projReceived = projTxs
               .filter(t => t.payment_status === 'PAID' || t.payment_status === 'SUCCEEDED')
@@ -818,45 +827,87 @@ export default function AdminTransactionsPage() {
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-slate-100 text-slate-700">
-                        {projTxs.map((tx) => {
-                          const isPending = ['PENDING_VERIFICATION', 'PENDING', 'CREATED'].includes(tx.payment_status);
-                          const isSucceeded = tx.payment_status === 'PAID' || tx.payment_status === 'SUCCEEDED';
-                          const isRejected = tx.payment_status === 'REJECTED';
+                        {Array.from(paymentGroups, ([groupKey, payments]) => {
+                          const tx = payments[0];
+                          if (!tx) return null;
                           const paymentMilestone = tx.milestone_id ? milestonesById.get(tx.milestone_id) : null;
                           const milestonePayout = paymentMilestone
                             ? projPayoutRows.find(payout => payout.milestone_id === paymentMilestone.id)
                             : null;
+                          const totalAmount = payments.reduce(
+                            (total, payment) => total + (payment.amount_centavos || 0) / 100,
+                            0,
+                          );
+                          const multiplePayments = payments.length > 1;
+                          const payerDetails = (
+                            <div className="space-y-1.5">
+                              {payments.map(payment => (
+                                <div key={payment.id} className="font-semibold text-slate-800">
+                                  {payment.sender_name && payment.sender_name !== 'Homeowner'
+                                    ? payment.sender_name
+                                    : proj.homeownerName || '—'}
+                                </div>
+                              ))}
+                            </div>
+                          );
+                          const methodDetails = (
+                            <div className="space-y-1.5">
+                              {payments.map(payment => (
+                                <div key={payment.id}>
+                                  <span className="font-semibold text-slate-800 capitalize">
+                                    {removeUnderscore(payment.provider || payment.payment_method)}
+                                  </span>
+                                  {payment.provider_tx_ref && (
+                                    <div className="text-[10px] text-blue-600 font-mono mt-0.5">
+                                      Ref: {payment.provider_tx_ref}
+                                    </div>
+                                  )}
+                                </div>
+                              ))}
+                            </div>
+                          );
+                          const paymentStatuses = payments.map(payment => {
+                            const pending = ['PENDING_VERIFICATION', 'PENDING', 'CREATED'].includes(payment.payment_status);
+                            const paid = payment.payment_status === 'PAID' || payment.payment_status === 'SUCCEEDED';
+                            const rejected = payment.payment_status === 'REJECTED';
+                            return { payment, pending, paid, rejected };
+                          });
 
                           return (
-                            <tr key={tx.id} className="transition-colors hover:bg-blue-50/30">
+                            <tr key={groupKey} className="transition-colors hover:bg-blue-50/30">
                               {/* 1. NAME OF THE PAYER */}
                               <td className="px-5 py-4">
-                                <div className="font-bold text-slate-900">
-                                  {tx.sender_name && tx.sender_name !== 'Homeowner' 
-                                    ? tx.sender_name 
-                                    : (proj.homeownerName || '—')}
-                                </div>
+                                {multiplePayments ? (
+                                  <details className="group">
+                                    <summary className="cursor-pointer list-none font-bold text-slate-900">
+                                      {payments.length} payers <span className="text-blue-600">▾</span>
+                                    </summary>
+                                    <div className="mt-2 rounded-lg border border-slate-200 bg-white p-2 text-[11px]">
+                                      {payerDetails}
+                                    </div>
+                                  </details>
+                                ) : <div className="font-bold text-slate-900">{payerDetails}</div>}
                               </td>
 
                               {/* 2. METHOD */}
                               <td className="px-5 py-4">
-                                <span className="font-semibold text-slate-800 capitalize">
-                                  {removeUnderscore(tx.provider || tx.payment_method)}
-                                </span>
-                                {tx.provider_tx_ref && (
-                                  <div className="text-[10px] text-blue-600 font-mono mt-0.5">
-                                    Ref: {tx.provider_tx_ref}
-                                  </div>
-                                )}
+                                {multiplePayments ? (
+                                  <details className="group">
+                                    <summary className="cursor-pointer list-none font-semibold text-slate-800">
+                                      {payments.length} payments <span className="text-blue-600">▾</span>
+                                    </summary>
+                                    <div className="mt-2 rounded-lg border border-slate-200 bg-white p-2 text-[11px]">
+                                      {methodDetails}
+                                    </div>
+                                  </details>
+                                ) : methodDetails}
                               </td>
 
                               {/* 3. PAYMENT ALLOCATION */}
                               <td className="px-5 py-4">
-                                {tx.milestone_id ? (
+                                {paymentMilestone ? (
                                   <span className="font-medium text-slate-800">
-                                    {paymentMilestone
-                                      ? `Milestone ${paymentMilestone.seq}: ${paymentMilestone.name}`
-                                      : 'Milestone payment'}
+                                    Milestone {paymentMilestone.seq}: {paymentMilestone.name}
                                   </span>
                                 ) : (
                                   <span className="font-medium text-slate-600">Full project payment</span>
@@ -870,12 +921,50 @@ export default function AdminTransactionsPage() {
 
                               {/* 5. AMOUNT */}
                               <td className="px-5 py-4 font-mono text-sm font-black text-slate-900">
-                                ₱{((tx.amount_centavos || 0) / 100).toLocaleString('en-US', { maximumFractionDigits: 0 })}
+                                {multiplePayments ? (
+                                  <details>
+                                    <summary className="cursor-pointer list-none">
+                                      ₱{totalAmount.toLocaleString('en-US', { maximumFractionDigits: 0 })} <span className="text-[10px] font-sans font-semibold text-blue-600">({payments.length} payments ▾)</span>
+                                    </summary>
+                                    <div className="mt-2 space-y-1 rounded-lg border border-slate-200 bg-white p-2 text-[11px] font-medium">
+                                      {payments.map(payment => (
+                                        <div key={payment.id} className="flex justify-between gap-3">
+                                          <span className="text-slate-500">{payment.sender_name || 'Homeowner'}</span>
+                                          <span>₱{((payment.amount_centavos || 0) / 100).toLocaleString('en-US', { maximumFractionDigits: 0 })}</span>
+                                        </div>
+                                      ))}
+                                    </div>
+                                  </details>
+                                ) : (
+                                  `₱${((tx.amount_centavos || 0) / 100).toLocaleString('en-US', { maximumFractionDigits: 0 })}`
+                                )}
                               </td>
 
                               {/* 6. PROOF */}
                               <td className="px-5 py-4">
-                                {tx.proof_file_url ? (
+                                {multiplePayments ? (
+                                  <details>
+                                    <summary className="cursor-pointer list-none rounded-lg bg-blue-50 px-2.5 py-1 font-bold text-[11px] text-blue-700 hover:bg-blue-100">
+                                      Proofs ({payments.length}) ▾
+                                    </summary>
+                                    <div className="mt-2 space-y-1 rounded-lg border border-slate-200 bg-white p-2">
+                                      {payments.map((payment, index) => (
+                                        <div key={payment.id} className="flex items-center justify-between gap-2">
+                                          <span className="text-[10px] text-slate-500">Payment {index + 1}</span>
+                                          {payment.proof_file_url ? (
+                                            <button
+                                              type="button"
+                                              onClick={() => setInspectorSlipUrl(payment.proof_file_url || null)}
+                                              className="inline-flex items-center gap-1 rounded-lg bg-blue-50 px-2 py-1 text-[10px] font-bold text-blue-700 hover:bg-blue-100"
+                                            >
+                                              <Eye className="h-3 w-3" /> Inspect
+                                            </button>
+                                          ) : <span className="text-[10px] italic text-slate-400">No file</span>}
+                                        </div>
+                                      ))}
+                                    </div>
+                                  </details>
+                                ) : tx.proof_file_url ? (
                                   <button
                                     type="button"
                                     onClick={() => setInspectorSlipUrl(tx.proof_file_url || null)}
@@ -891,69 +980,95 @@ export default function AdminTransactionsPage() {
 
                               {/* 7. ACTION */}
                               <td className="px-5 py-4 text-right">
-                                {isPending ? (
-                                  <div className="inline-flex items-center gap-1.5 justify-end">
-                                    <button
-                                      type="button"
-                                      onClick={() => setReviewingTx(tx)}
-                                      className="px-3 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs shadow-xs transition flex items-center gap-1"
-                                    >
-                                      <Check className="w-3.5 h-3.5" />
-                                      <span>Review &amp; Approve</span>
-                                    </button>
-                                    <button
-                                      type="button"
-                                      onClick={() => {
-                                        setRejectingTx(tx);
-                                        setRejectionReason('');
-                                      }}
-                                      className="px-2.5 py-1.5 rounded-xl bg-red-50 hover:bg-red-100 text-red-700 font-semibold text-xs border border-red-200 transition"
-                                    >
-                                      Reject
-                                    </button>
-                                  </div>
-                                ) : isSucceeded ? (
-                                  tx.payout_status === 'PAID' || milestonePayout ? (
-                                    <div className="inline-flex items-center gap-1.5 justify-end">
-                                      <span className="px-2.5 py-1 rounded-xl bg-slate-100 text-slate-700 font-bold text-xs flex items-center gap-1 border border-slate-200">
-                                        <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
-                                        <span>Transferred</span>
-                                      </span>
-                                      {tx.payout_proof_url && (
-                                        <button
-                                          type="button"
-                                          onClick={() => setInspectingPayoutProof({
+                                {multiplePayments ? (
+                                  <details className="text-left">
+                                    <summary className="inline-block cursor-pointer list-none rounded-lg border border-slate-200 bg-slate-50 px-2.5 py-1.5 text-[10px] font-bold text-slate-700">
+                                      Actions ({payments.length}) ▾
+                                    </summary>
+                                    <div className="ml-auto mt-2 max-h-72 w-80 max-w-full space-y-2 overflow-y-auto rounded-xl border border-slate-200 bg-white p-2 text-left shadow-xl">
+                                      {paymentStatuses.map(({ payment, pending, paid, rejected }, index) => (
+                                        <div key={payment.id} className="flex items-center justify-between gap-2 rounded-lg border border-slate-100 p-2">
+                                          <div className="min-w-0">
+                                            <div className="truncate text-[10px] font-semibold text-slate-700">
+                                              Payment {index + 1} · ₱{((payment.amount_centavos || 0) / 100).toLocaleString('en-US', { maximumFractionDigits: 0 })}
+                                            </div>
+                                            <div className="text-[9px] text-slate-400">{removeUnderscore(payment.payment_status)}</div>
+                                          </div>
+                                          {pending ? (
+                                            <div className="flex shrink-0 gap-1">
+                                              <button type="button" onClick={() => setReviewingTx(payment)} className="rounded-lg bg-emerald-600 px-2 py-1 text-[10px] font-bold text-white hover:bg-emerald-700">Review</button>
+                                              <button type="button" onClick={() => { setRejectingTx(payment); setRejectionReason(''); }} className="rounded-lg border border-red-200 bg-red-50 px-2 py-1 text-[10px] font-semibold text-red-700 hover:bg-red-100">Reject</button>
+                                            </div>
+                                          ) : paid && (payment.payout_status === 'PAID' || milestonePayout) ? (
+                                            <div className="flex shrink-0 items-center gap-1">
+                                              <span className="text-[10px] font-bold text-emerald-700">Transferred</span>
+                                              {payment.payout_proof_url && (
+                                                <button type="button" onClick={() => setInspectingPayoutProof({
+                                                  url: payment.payout_proof_url!,
+                                                  ref: payment.payout_tx_ref || 'DISBURSE-REF',
+                                                  contractor: proj.contractorName,
+                                                  amount: (payment.amount_centavos || 0) / 100,
+                                                  method: payment.payment_method,
+                                                  date: new Date().toISOString(),
+                                                })} className="rounded-lg bg-indigo-50 px-2 py-1 text-[10px] font-bold text-indigo-700 hover:bg-indigo-100">Proof</button>
+                                              )}
+                                            </div>
+                                          ) : rejected ? (
+                                            <span className="text-[10px] font-semibold text-red-600">Declined</span>
+                                          ) : paid ? (
+                                            <span className="text-right text-[9px] font-semibold text-slate-500">
+                                              {paymentMilestone?.status === 'approved' ? 'Ready for project transfer' : paymentMilestone ? 'Awaiting milestone approval' : 'Held in project vault'}
+                                            </span>
+                                          ) : (
+                                            <span className="text-[10px] font-semibold text-slate-400">Awaiting verification</span>
+                                          )}
+                                        </div>
+                                      ))}
+                                    </div>
+                                  </details>
+                                ) : (() => {
+                                  const { pending, paid, rejected } = paymentStatuses[0];
+                                  if (pending) {
+                                    return (
+                                      <div className="inline-flex items-center gap-1.5 justify-end">
+                                        <button type="button" onClick={() => setReviewingTx(tx)} className="px-3 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs shadow-xs transition flex items-center gap-1">
+                                          <Check className="w-3.5 h-3.5" /><span>Review &amp; Approve</span>
+                                        </button>
+                                        <button type="button" onClick={() => { setRejectingTx(tx); setRejectionReason(''); }} className="px-2.5 py-1.5 rounded-xl bg-red-50 hover:bg-red-100 text-red-700 font-semibold text-xs border border-red-200 transition">Reject</button>
+                                      </div>
+                                    );
+                                  }
+                                  if (paid && (tx.payout_status === 'PAID' || milestonePayout)) {
+                                    return (
+                                      <div className="inline-flex items-center gap-1.5 justify-end">
+                                        <span className="px-2.5 py-1 rounded-xl bg-slate-100 text-slate-700 font-bold text-xs flex items-center gap-1 border border-slate-200">
+                                          <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" /><span>Transferred</span>
+                                        </span>
+                                        {tx.payout_proof_url && (
+                                          <button type="button" onClick={() => setInspectingPayoutProof({
                                             url: tx.payout_proof_url!,
                                             ref: tx.payout_tx_ref || 'DISBURSE-REF',
                                             contractor: proj.contractorName,
                                             amount: (tx.amount_centavos || 0) / 100,
                                             method: tx.payment_method,
-                                            date: new Date().toISOString()
-                                          })}
-                                          className="px-2.5 py-1 rounded-lg bg-indigo-50 hover:bg-indigo-100 text-indigo-700 text-[10px] font-bold border border-indigo-200 transition flex items-center gap-1"
-                                          title="View proof sent to contractor"
-                                        >
-                                          <Eye className="w-3 h-3" />
-                                          <span>Proof</span>
-                                        </button>
-                                      )}
-                                    </div>
-                                  ) : (
-                                    <span className="text-[11px] font-semibold text-slate-400">
-                                      {tx.payment_status !== 'PAID'
-                                        ? 'Awaiting payment verification'
-                                        : paymentMilestone?.status === 'approved'
-                                        ? 'Ready for project transfer'
-                                        : paymentMilestone
-                                        ? 'Awaiting milestone approval'
-                                        : 'Held in project vault'}
-                                    </span>
-                                  )
-                                ) : isRejected ? (
-                                  <span className="text-red-600 text-xs font-semibold italic">
-                                    Declined (Unpaid)
-                                  </span>
-                                ) : null}
+                                            date: new Date().toISOString(),
+                                          })} className="px-2.5 py-1 rounded-lg bg-indigo-50 hover:bg-indigo-100 text-indigo-700 text-[10px] font-bold border border-indigo-200 transition flex items-center gap-1" title="View proof sent to contractor">
+                                            <Eye className="w-3 h-3" /><span>Proof</span>
+                                          </button>
+                                        )}
+                                      </div>
+                                    );
+                                  }
+                                  if (rejected) return <span className="text-red-600 text-xs font-semibold italic">Declined (Unpaid)</span>;
+                                  if (paid) {
+                                    return (
+                                      <span className="text-[11px] font-semibold text-slate-400">
+                                        {paymentMilestone?.status === 'approved' ? 'Ready for project transfer' : paymentMilestone ? 'Awaiting milestone approval' : 'Held in project vault'}
+                                      </span>
+                                    );
+                                  }
+                                  return null;
+                                })()}
                               </td>
                             </tr>
                           );

@@ -21,7 +21,10 @@ import { resolvePortfolioImageUrl } from '@/lib/supabase/storage';
 import { optimizeImage } from '@/lib/image-optimization';
 import { PortfolioItem, HouseType, MilestoneStatus, Project, Quote } from '@/types/database';
 
-type CompletedContractProject = Pick<Project, 'id' | 'title' | 'city' | 'province' | 'updated_at'>;
+type CompletedContractProject = Pick<
+  Project,
+  'id' | 'title' | 'city' | 'province' | 'updated_at' | 'plan_file_path' | 'floor_area_sqm' | 'floors'
+>;
 
 export default function ContractorPortfolioPage() {
   return (
@@ -131,7 +134,7 @@ function ContractorPortfolioContent() {
       const projectsResult = quotedProjectIds.length
         ? await supabase
           .from('projects')
-          .select('id, title, status, city, province, updated_at, awarded_quote_id')
+          .select('id, title, status, city, province, updated_at, awarded_quote_id, plan_file_path, floor_area_sqm, floors')
           .in('id', quotedProjectIds)
         : { data: [], error: null };
       if (projectsResult.error) {
@@ -175,6 +178,9 @@ function ContractorPortfolioContent() {
           city: project.city,
           province: project.province,
           updated_at: project.updated_at,
+          plan_file_path: project.plan_file_path,
+          floor_area_sqm: project.floor_area_sqm,
+          floors: project.floors,
         })));
     }
     setPortfolioItems(dbItems);
@@ -379,24 +385,56 @@ function ContractorPortfolioContent() {
                 {completedProjects.length} completed {completedProjects.length === 1 ? 'project' : 'projects'}
               </span>
             </div>
-            <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
+            <div className="grid grid-cols-1 gap-6 md:grid-cols-2 lg:grid-cols-3">
               {completedProjects.map(project => (
-                <Link
+                <article
                   key={project.id}
-                  href={`/contractor/projects/${project.id}`}
-                  className="flex items-center justify-between gap-4 rounded-2xl border border-emerald-100 bg-white p-5 shadow-xs transition hover:border-emerald-300 hover:shadow-sm"
+                  className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-xs transition-all hover:-translate-y-0.5 hover:border-emerald-200 hover:shadow-md"
                 >
-                  <div className="min-w-0">
-                    <h3 className="truncate text-sm font-bold text-slate-900">{project.title}</h3>
-                    <p className="mt-1 truncate text-xs text-slate-500">
-                      {[project.city, project.province].filter(Boolean).join(', ') || 'Location not provided'}
-                    </p>
+                  <Link href={`/contractor/projects/${project.id}`} className="block">
+                    <div
+                      className="relative flex h-48 items-center justify-center overflow-hidden bg-slate-100 bg-cover bg-center"
+                      style={project.plan_file_path ? { backgroundImage: `url("${project.plan_file_path}")` } : undefined}
+                    >
+                      {!project.plan_file_path && (
+                        <div className="text-center text-slate-400">
+                          <Building2 className="mx-auto h-9 w-9 text-slate-300" />
+                          <span className="mt-1 block text-[11px]">Completed Build</span>
+                        </div>
+                      )}
+                      <span className="absolute right-3 top-3 inline-flex items-center gap-1 rounded-full bg-emerald-50/95 px-2.5 py-1 text-[10px] font-bold text-emerald-700 shadow-sm backdrop-blur">
+                        <CheckCircle2 className="h-3 w-3" />
+                        Completed
+                      </span>
+                    </div>
+                    <div className="space-y-3 p-5">
+                      <div>
+                        <h3 className="text-base font-bold text-slate-900">{project.title}</h3>
+                        <p className="mt-1 text-xs text-slate-500">
+                          Completed in {new Date(project.updated_at).getFullYear()}
+                        </p>
+                      </div>
+                      <p className="text-xs text-slate-600">
+                        {[project.city, project.province].filter(Boolean).join(', ') || 'Location not provided'}
+                      </p>
+                      {(project.floor_area_sqm || project.floors) && (
+                        <div className="grid grid-cols-2 gap-2 border-t border-slate-100 pt-3 text-xs text-slate-600">
+                          {project.floor_area_sqm && (
+                            <span><span className="text-slate-400">Area:</span> <strong className="text-slate-900">{project.floor_area_sqm} sq.m</strong></span>
+                          )}
+                          {project.floors && (
+                            <span><span className="text-slate-400">Floors:</span> <strong className="text-slate-900">{project.floors} Storey</strong></span>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  </Link>
+                  <div className="border-t border-slate-100 bg-slate-50 px-5 py-3">
+                    <Link href={`/contractor/projects/${project.id}`} className="text-xs font-bold text-blue-600 hover:text-blue-700">
+                      View Project Details
+                    </Link>
                   </div>
-                  <span className="inline-flex shrink-0 items-center gap-1 rounded-full bg-emerald-50 px-2.5 py-1 text-[10px] font-bold text-emerald-700">
-                    <CheckCircle2 className="h-3 w-3" />
-                    Completed
-                  </span>
-                </Link>
+                </article>
               ))}
             </div>
           </section>
