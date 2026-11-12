@@ -64,6 +64,13 @@ const workflowStages = [
   'Project Completed',
 ];
 
+function isProjectComplete(project: DashboardProject, milestones: DashboardMilestone[]): boolean {
+  return project.status === 'completed'
+    || (milestones.length > 0 && milestones.every(milestone =>
+      milestone.status === 'approved' || milestone.status === 'paid'
+    ));
+}
+
 function getProjectProgress(
   project: DashboardProject,
   milestones: DashboardMilestone[],
@@ -77,8 +84,7 @@ function getProjectProgress(
   const activeMilestone = sortedMilestones.find(milestone =>
     milestone.status === 'in_progress' || milestone.status === 'proof_submitted' || milestone.status === 'disputed'
   );
-  const isComplete = project.status === 'completed'
-    || (sortedMilestones.length > 0 && completedMilestones === sortedMilestones.length);
+  const isComplete = isProjectComplete(project, sortedMilestones);
   const quotationApproved = Boolean(project.awarded_quote_id)
     || activeProjectStatuses.includes(project.status as typeof activeProjectStatuses[number]);
   const planApproved = plan?.status === 'approved' || project.status === 'in_progress' || project.status === 'completed';
@@ -119,7 +125,9 @@ function getProjectProgress(
   };
 }
 
-function statusLabel(status: DashboardProject['status'], hasSubmittedQuote: boolean): string {
+function statusLabel(status: DashboardProject['status'], hasSubmittedQuote: boolean, isComplete: boolean): string {
+  if (isComplete) return 'Completed';
+
   const labels: Record<DashboardProject['status'], string> = {
     draft: 'Draft',
     open: hasSubmittedQuote ? 'New Quotation' : 'Awaiting Contractor',
@@ -134,7 +142,8 @@ function statusLabel(status: DashboardProject['status'], hasSubmittedQuote: bool
   return labels[status];
 }
 
-function statusClasses(status: DashboardProject['status'], hasSubmittedQuote: boolean): string {
+function statusClasses(status: DashboardProject['status'], hasSubmittedQuote: boolean, isComplete: boolean): string {
+  if (isComplete) return 'bg-emerald-50 text-emerald-700 ring-emerald-100';
   if (hasSubmittedQuote && status === 'open') return 'bg-blue-50 text-blue-700 ring-blue-100';
   if (status === 'completed') return 'bg-emerald-50 text-emerald-700 ring-emerald-100';
   if (status === 'in_progress' || status === 'awarded') return 'bg-blue-50 text-blue-700 ring-blue-100';
@@ -220,7 +229,16 @@ export default function HomeownerDashboard() {
     void loadData();
   }, []);
 
-  const activeProjects = projects.filter(project => activeProjectStatuses.includes(project.status as typeof activeProjectStatuses[number]));
+  const milestonesByProjectId = new Map<string, DashboardMilestone[]>();
+  for (const milestone of milestones) {
+    const projectMilestones = milestonesByProjectId.get(milestone.project_id) || [];
+    projectMilestones.push(milestone);
+    milestonesByProjectId.set(milestone.project_id, projectMilestones);
+  }
+  const activeProjects = projects.filter(project =>
+    activeProjectStatuses.includes(project.status as typeof activeProjectStatuses[number])
+    && !isProjectComplete(project, milestonesByProjectId.get(project.id) || [])
+  );
   const submittedQuoteProjectIds = new Set(
     quotes
       .filter(quote =>
@@ -305,9 +323,10 @@ export default function HomeownerDashboard() {
             ) : (
               <div className="space-y-4 p-5 sm:p-6">
                 {visibleProjects.map(project => {
-                  const projectMilestones = milestones.filter(milestone => milestone.project_id === project.id);
+                  const projectMilestones = milestonesByProjectId.get(project.id) || [];
                   const hasSubmittedQuote = submittedQuoteProjectIds.has(project.id);
                   const progress = getProjectProgress(project, projectMilestones, planByProjectId.get(project.id), hasSubmittedQuote);
+                  const isComplete = isProjectComplete(project, projectMilestones);
                   return (
                     <article key={project.id} className="rounded-2xl border border-slate-200 p-4 transition hover:border-blue-200 hover:shadow-sm sm:p-5">
                       <div className="flex flex-col gap-4 lg:flex-row">
@@ -327,7 +346,7 @@ export default function HomeownerDashboard() {
                                 <span>•</span><span>{project.floor_area_sqm} sq.m · {project.floors} floor{project.floors === 1 ? '' : 's'}</span>
                               </div>
                             </div>
-                            <span className={`rounded-full px-2.5 py-1 text-[11px] font-bold ring-1 ${statusClasses(project.status, hasSubmittedQuote)}`}>{statusLabel(project.status, hasSubmittedQuote)}</span>
+                            <span className={`rounded-full px-2.5 py-1 text-[11px] font-bold ring-1 ${statusClasses(project.status, hasSubmittedQuote, isComplete)}`}>{statusLabel(project.status, hasSubmittedQuote, isComplete)}</span>
                           </div>
 
                           {hasSubmittedQuote && (

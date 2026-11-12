@@ -33,14 +33,13 @@ function groupByProject<T extends { project_id?: string | null }>(records: T[]) 
   }));
 }
 
-function groupMilestonePayments(records: PaymentTransactionRecord[], completedProjectIds: Set<string>) {
+function groupReleasedMilestonePayments(records: PaymentTransactionRecord[]) {
   const grouped = new Map<string, PaymentTransactionRecord[]>();
   const rows: Array<{ key: string; transactions: PaymentTransactionRecord[] }> = [];
 
   for (const transaction of records) {
     const isReleased = transaction.payout_status === 'PAID' || transaction.payout_status === 'RELEASED';
-    const isCompletedProject = Boolean(transaction.project_id && completedProjectIds.has(transaction.project_id));
-    if ((!isReleased && !isCompletedProject) || !transaction.project_id) {
+    if (!isReleased || !transaction.project_id) {
       rows.push({ key: transaction.id, transactions: [transaction] });
       continue;
     }
@@ -121,7 +120,6 @@ export default function ContractorPaymentsPage() {
   const [ledgerEntries, setLedgerEntries] = React.useState<EscrowLedger[]>([]);
   const [homeownerSubmissions, setHomeownerSubmissions] = React.useState<PaymentTransactionRecord[]>([]);
   const [projectTitles, setProjectTitles] = React.useState<Record<string, string>>({});
-  const [completedProjectIds, setCompletedProjectIds] = React.useState<Set<string>>(new Set());
   const [payoutCount, setPayoutCount] = React.useState(0);
   const [ledgerCount, setLedgerCount] = React.useState(0);
   const [submissionCount, setSubmissionCount] = React.useState(0);
@@ -143,8 +141,8 @@ export default function ContractorPaymentsPage() {
     date?: string | null;
   } | null>(null);
   const homeownerPaymentRows = React.useMemo(
-    () => groupMilestonePayments(homeownerSubmissions, completedProjectIds),
-    [homeownerSubmissions, completedProjectIds],
+    () => groupReleasedMilestonePayments(homeownerSubmissions),
+    [homeownerSubmissions],
   );
 
   const loadData = React.useCallback(async () => {
@@ -178,7 +176,7 @@ export default function ContractorPaymentsPage() {
           .order('created_at', { ascending: false }),
         supabase
           .from('payment_transactions')
-          .select('id, project_id, milestone_id, transaction_ref, payment_method, provider, sender_name, provider_tx_ref, amount_centavos, payment_status, payout_status, payout_tx_ref, net_amount_centavos, verified_at, created_at', { count: 'exact' })
+          .select('id, project_id, transaction_ref, payment_method, provider, sender_name, provider_tx_ref, amount_centavos, payment_status, payout_status, payout_tx_ref, net_amount_centavos, verified_at, created_at', { count: 'exact' })
           .eq('recipient_id', user.id)
           .range(0, PAGE_SIZE - 1)
           .order('created_at', { ascending: false }),
@@ -197,7 +195,7 @@ export default function ContractorPaymentsPage() {
         ...(txData || []).map(transaction => transaction.project_id),
       ].filter((projectId): projectId is string => Boolean(projectId))));
       const { data: projectData, error: projectsError } = projectIds.length
-        ? await supabase.from('projects').select('id, title, status').in('id', projectIds)
+        ? await supabase.from('projects').select('id, title').in('id', projectIds)
         : { data: [], error: null };
       if (projectsError) {
         setLoadError(projectsError.message);
@@ -210,9 +208,6 @@ export default function ContractorPaymentsPage() {
       setLedgerEntries((lData || []) as EscrowLedger[]);
       setHomeownerSubmissions((txData || []) as PaymentTransactionRecord[]);
       setProjectTitles(Object.fromEntries((projectData || []).map(project => [project.id, project.title])));
-      setCompletedProjectIds(new Set((projectData || [])
-        .filter(project => project.status === 'completed')
-        .map(project => project.id)));
       setPayoutCount(payoutTotal ?? pData?.length ?? 0);
       setLedgerCount(ledgerTotal ?? lData?.length ?? 0);
       setSubmissionCount(submissionTotal ?? txData?.length ?? 0);
@@ -288,7 +283,7 @@ export default function ContractorPaymentsPage() {
           .order('created_at', { ascending: false }),
         supabase
           .from('payment_transactions')
-          .select('id, project_id, milestone_id, transaction_ref, payment_method, provider, sender_name, provider_tx_ref, amount_centavos, payment_status, payout_status, payout_tx_ref, net_amount_centavos, verified_at, created_at', { count: 'exact' })
+          .select('id, project_id, transaction_ref, payment_method, provider, sender_name, provider_tx_ref, amount_centavos, payment_status, payout_status, payout_tx_ref, net_amount_centavos, verified_at, created_at', { count: 'exact' })
           .eq('recipient_id', user.id)
           .range((submissionPage - 1) * PAGE_SIZE, submissionPage * PAGE_SIZE - 1)
           .order('created_at', { ascending: false }),
@@ -316,7 +311,7 @@ export default function ContractorPaymentsPage() {
             .not('payout_proof_url', 'is', null)
           : Promise.resolve({ data: [], error: null }),
         projectIds.length
-          ? supabase.from('projects').select('id, title, status').in('id', projectIds)
+          ? supabase.from('projects').select('id, title').in('id', projectIds)
           : Promise.resolve({ data: [], error: null }),
       ]);
       if (requestId !== pageRequestId.current) return;
@@ -330,9 +325,6 @@ export default function ContractorPaymentsPage() {
       setLedgerEntries((lData || []) as EscrowLedger[]);
       setHomeownerSubmissions((txData || []) as PaymentTransactionRecord[]);
       setProjectTitles(Object.fromEntries((projectsResult.data || []).map(project => [project.id, project.title])));
-      setCompletedProjectIds(new Set((projectsResult.data || [])
-        .filter(project => project.status === 'completed')
-        .map(project => project.id)));
       setProofTransactionIds(new Set((proofIdsResult.data || []).map(row => row.id)));
       setPayoutCount(payoutTotal ?? pData?.length ?? 0);
       setLedgerCount(ledgerTotal ?? lData?.length ?? 0);
@@ -478,25 +470,16 @@ export default function ContractorPaymentsPage() {
                             0,
                           );
                           const isCombined = transactions.length > 1;
-                          const isPending = transactions.some(transaction =>
-                            transaction.payment_status === 'PENDING_VERIFICATION' || transaction.payment_status === 'PENDING'
-                          );
+                          const isPending = tx.payment_status === 'PENDING_VERIFICATION' || tx.payment_status === 'PENDING';
                           const isPaid = transactions.every(transaction =>
                             transaction.payment_status === 'PAID' || transaction.payment_status === 'SUCCEEDED'
                           );
-                          const isRejected = transactions.some(transaction => transaction.payment_status === 'REJECTED');
-                          const allReleased = transactions.every(transaction =>
+                          const isRejected = tx.payment_status === 'REJECTED';
+                          const payoutStat = transactions.every(transaction =>
                             transaction.payout_status === 'PAID' || transaction.payout_status === 'RELEASED'
-                          );
-                          const payoutStat = allReleased
+                          )
                             ? 'RELEASED'
-                            : transactions.find(transaction =>
-                                transaction.payout_status !== 'PAID' && transaction.payout_status !== 'RELEASED'
-                              )?.payout_status === 'NOT_DUE'
-                              ? 'NOT_READY'
-                              : transactions.find(transaction =>
-                                  transaction.payout_status !== 'PAID' && transaction.payout_status !== 'RELEASED'
-                                )?.payout_status || 'NOT_READY';
+                            : tx.payout_status === 'NOT_DUE' ? 'NOT_READY' : tx.payout_status;
                           const proofTransaction = transactions.find(transaction => proofTransactionIds.has(transaction.id));
 
                           return (
