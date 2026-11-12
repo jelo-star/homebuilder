@@ -397,7 +397,9 @@ function ProjectDetailsContent() {
       ? 'payments'
       : activeTab === 'disputes' || activeTab === 'project_plan'
         ? activeTab
-        : null;
+        : activeTab === 'milestones' && milestones.some(milestone => milestone.status === 'disputed')
+          ? 'disputes'
+          : null;
     if (
       !tab
       || (tab === 'payments' && paymentTransactionsLoaded)
@@ -459,7 +461,7 @@ function ProjectDetailsContent() {
       active = false;
       setLoadingTabData(false);
     };
-  }, [activeTab, isPaymentModalOpen, loading, milestoneToApprove, paymentTransactionsLoaded, project, projectId]);
+  }, [activeTab, isPaymentModalOpen, loading, milestoneToApprove, milestones, paymentTransactionsLoaded, project, projectId]);
 
   React.useEffect(() => {
     if (!isPaymentModalOpen) return;
