@@ -2857,29 +2857,32 @@ function ProjectDetailsContent() {
               </div>
 
               <div className="overflow-x-auto rounded-xl border border-slate-200">
-                <table className="w-full min-w-[640px] text-left text-xs">
+                <table className="w-full min-w-[420px] text-left text-xs">
                   <thead className="bg-slate-50 text-[10px] uppercase tracking-wide text-slate-500">
                     <tr>
                       <th className="px-3 py-2.5 font-bold">Milestone</th>
-                      <th className="px-3 py-2.5 text-right font-bold">Required amount</th>
-                      <th className="px-3 py-2.5 text-right font-bold">Allocated payment</th>
-                      <th className="px-3 py-2.5 text-right font-bold">Outstanding</th>
+                      <th className="px-3 py-2.5 text-right font-bold">Amount</th>
+                      <th className="px-3 py-2.5 text-right font-bold">Status</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-100">
                     {milestones.map(milestone => {
                       const allocation = milestoneFunding.get(milestone.id);
+                      const isPaid = (allocation?.outstanding ?? milestone.amount) <= 0;
                       return (
                         <tr key={milestone.id}>
                           <td className="px-3 py-3 font-semibold text-slate-800">{milestone.seq}. {cleanMilestoneTitle(milestone.name)}</td>
                           <td className="px-3 py-3 text-right font-mono text-slate-700">{formatCurrency(allocation?.required ?? milestone.amount)}</td>
-                          <td className="px-3 py-3 text-right font-mono text-emerald-700">{formatCurrency(allocation?.allocated ?? 0)}</td>
-                          <td className="px-3 py-3 text-right font-mono font-bold text-amber-800">{formatCurrency(allocation?.outstanding ?? milestone.amount)}</td>
+                          <td className="px-3 py-3 text-right">
+                            <span className={`inline-flex rounded-full px-2.5 py-1 text-[10px] font-bold ${isPaid ? 'bg-emerald-50 text-emerald-700' : 'bg-amber-50 text-amber-700'}`}>
+                              {isPaid ? 'Paid' : 'Unpaid'}
+                            </span>
+                          </td>
                         </tr>
                       );
                     })}
                     {milestones.length === 0 && (
-                      <tr><td colSpan={4} className="px-3 py-6 text-center text-slate-500">Milestone payment allocations will appear after the contractor submits a project plan.</td></tr>
+                      <tr><td colSpan={3} className="px-3 py-6 text-center text-slate-500">Milestone payment allocations will appear after the contractor submits a project plan.</td></tr>
                     )}
                   </tbody>
                 </table>
