@@ -219,6 +219,7 @@ function AppLayoutContent({
           items: [
             { id: 'ho-dashboard', label: 'Dashboard', href: '/homeowner/dashboard', icon: LayoutDashboard },
             { id: 'ho-projects', label: 'My Projects', href: '/homeowner/projects', icon: Building2 },
+            { id: 'ho-completed-projects', label: 'Completed Projects', href: '/homeowner/completed-projects', icon: CheckCircle2 },
             { id: 'ho-estimator', label: 'Create Project', href: '/homeowner/projects/create', icon: PlusCircle },
           ]
         },
@@ -237,7 +238,7 @@ function AppLayoutContent({
           items: [
             { id: 'ct-dashboard', label: 'Dashboard', href: '/contractor/dashboard', icon: LayoutDashboard },
             { id: 'ct-projects', label: 'My Projects', href: '/contractor/projects', icon: HardHat },
-            { id: 'ct-portfolio', label: 'Projects Portfolio', href: '/contractor/portfolio', icon: Briefcase },
+            { id: 'ct-portfolio', label: 'Completed Projects & Portfolio', href: '/contractor/portfolio', icon: Briefcase },
             { id: 'ct-leads', label: 'Opportunities', href: '/contractor/opportunities', icon: Building2 },
             { id: 'ct-payments', label: 'Payments & Earnings', href: '/contractor/payments', icon: Landmark },
             { id: 'ct-payout-methods', label: 'Payout Methods', href: '/contractor/settings/payment-methods', icon: DollarSign },

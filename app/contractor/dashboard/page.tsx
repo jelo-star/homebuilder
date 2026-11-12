@@ -239,6 +239,7 @@ export default function ContractorDashboard() {
             <div className="mt-6 flex flex-wrap gap-3">
               <Link href="/contractor/opportunities" className="inline-flex items-center gap-2 rounded-xl bg-white px-4 py-2.5 text-sm font-bold text-blue-700 hover:bg-blue-50">Browse Opportunities <ChevronRight className="h-4 w-4" /></Link>
               <Link href="/contractor/projects" className="inline-flex items-center gap-2 rounded-xl border border-white/40 px-4 py-2.5 text-sm font-bold text-white hover:bg-white/10">My Projects</Link>
+              <Link href="/contractor/portfolio" className="inline-flex items-center gap-2 rounded-xl border border-white/40 px-4 py-2.5 text-sm font-bold text-white hover:bg-white/10">Completed Projects &amp; Portfolio</Link>
             </div>
           </div>
         </section>

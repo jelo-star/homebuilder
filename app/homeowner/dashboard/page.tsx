@@ -254,13 +254,11 @@ export default function HomeownerDashboard() {
   const pendingPlanCount = plans.filter(plan => plan.status === 'submitted' || plan.status === 'revision_requested').length;
   const pendingActions = pendingQuotationCount + pendingMilestoneCount + pendingPlanCount;
   const planByProjectId = new Map(plans.map(plan => [plan.project_id, plan]));
-  const visibleProjects = [...projects]
-    .sort((a, b) => {
-      const aComplete = isProjectComplete(a, milestonesByProjectId.get(a.id) || []);
-      const bComplete = isProjectComplete(b, milestonesByProjectId.get(b.id) || []);
-      if (aComplete !== bComplete) return aComplete ? 1 : -1;
-      return b.updated_at.localeCompare(a.updated_at);
-    })
+  const completedProjectsCount = projects.filter(project =>
+    isProjectComplete(project, milestonesByProjectId.get(project.id) || [])
+  ).length;
+  const visibleProjects = projects
+    .filter(project => !isProjectComplete(project, milestonesByProjectId.get(project.id) || []))
     .slice(0, 3);
   const displayName = profile?.full_name?.trim() || 'Homeowner';
 
@@ -313,7 +311,14 @@ export default function HomeownerDashboard() {
                 <h2 className="flex items-center gap-2 text-base font-bold text-slate-900"><Building2 className="h-5 w-5 text-blue-600" /> My Projects</h2>
                 <p className="mt-1 text-xs text-slate-500">Monitor your projects and the next step for each one.</p>
               </div>
-              <Link href="/homeowner/projects" className="hidden items-center gap-1 text-xs font-bold text-blue-600 hover:text-blue-700 sm:flex">View All Projects <ChevronRight className="h-4 w-4" /></Link>
+              <div className="flex items-center gap-4">
+                {completedProjectsCount > 0 && (
+                  <Link href="/homeowner/completed-projects" className="hidden items-center gap-1 text-xs font-bold text-emerald-700 hover:text-emerald-800 sm:flex">
+                    Completed ({completedProjectsCount}) <ChevronRight className="h-4 w-4" />
+                  </Link>
+                )}
+                <Link href="/homeowner/projects" className="hidden items-center gap-1 text-xs font-bold text-blue-600 hover:text-blue-700 sm:flex">View All Projects <ChevronRight className="h-4 w-4" /></Link>
+              </div>
             </div>
 
             {loading ? (
@@ -323,9 +328,19 @@ export default function HomeownerDashboard() {
             ) : visibleProjects.length === 0 ? (
               <div className="px-6 py-14 text-center">
                 <Building2 className="mx-auto h-10 w-10 text-slate-300" />
-                <h3 className="mt-3 text-base font-bold text-slate-900">No projects yet</h3>
-                <p className="mx-auto mt-1 max-w-sm text-sm text-slate-500">Create your first project to estimate costs and connect with verified contractors.</p>
-                <Link href="/homeowner/projects/create" className="mt-5 inline-flex items-center gap-2 rounded-xl bg-blue-600 px-4 py-2.5 text-sm font-bold text-white hover:bg-blue-700"><Plus className="h-4 w-4" /> Create Project</Link>
+                <h3 className="mt-3 text-base font-bold text-slate-900">{projects.length > 0 ? 'No active projects' : 'No projects yet'}</h3>
+                <p className="mx-auto mt-1 max-w-sm text-sm text-slate-500">
+                  {projects.length > 0
+                    ? 'Your completed projects are available on the Completed Projects page.'
+                    : 'Create your first project to estimate costs and connect with verified contractors.'}
+                </p>
+                {projects.length > 0 ? (
+                  <Link href="/homeowner/completed-projects" className="mt-5 inline-flex items-center gap-2 rounded-xl bg-emerald-600 px-4 py-2.5 text-sm font-bold text-white hover:bg-emerald-700">
+                    View Completed Projects <ChevronRight className="h-4 w-4" />
+                  </Link>
+                ) : (
+                  <Link href="/homeowner/projects/create" className="mt-5 inline-flex items-center gap-2 rounded-xl bg-blue-600 px-4 py-2.5 text-sm font-bold text-white hover:bg-blue-700"><Plus className="h-4 w-4" /> Create Project</Link>
+                )}
               </div>
             ) : (
               <div className="space-y-4 p-5 sm:p-6">
