@@ -4,10 +4,11 @@ import React from 'react';
 import Link from 'next/link';
 import { usePathname, useSearchParams } from 'next/navigation';
 import { createClient } from '@/lib/supabase/client';
+import { resolvePublicStorageUrl } from '@/lib/supabase/storage';
 import { UserRole } from '@/types/database';
+import BrandLogo from '@/components/ui/BrandLogo';
 import {
   Building2,
-  Home,
   Briefcase,
   ShieldCheck,
   LogOut,
@@ -20,10 +21,7 @@ import {
   LayoutDashboard,
   HardHat,
   Users,
-  FileCheck,
   Landmark,
-  ArrowLeftRight,
-  ShieldAlert,
   History,
   BarChart3,
   Settings,
@@ -77,6 +75,8 @@ function AppLayoutContent({
   const currentTab = searchParams.get('tab');
   const [sidebarOpen, setSidebarOpen] = React.useState(false);
   const [profileName, setProfileName] = React.useState<string | null>(userName || null);
+  const [profileImageUrl, setProfileImageUrl] = React.useState('');
+  const [profileLoaded, setProfileLoaded] = React.useState(false);
   const displayName = profileName || userName || 'User';
   const roleLabel = `${userRole.charAt(0).toUpperCase()}${userRole.slice(1)}`;
 
@@ -93,6 +93,17 @@ function AppLayoutContent({
 
   React.useEffect(() => {
     let active = true;
+    const cacheKey = `homebuildr-profile-${userRole}`;
+    try {
+      const cached = JSON.parse(window.localStorage.getItem(cacheKey) || 'null') as {
+        name?: string;
+        imageUrl?: string;
+      } | null;
+      if (cached?.name) setProfileName(cached.name);
+      if (cached?.imageUrl) setProfileImageUrl(cached.imageUrl);
+    } catch {
+      // Ignore unavailable or malformed browser cache and load the profile normally.
+    }
 
     async function loadCurrentUserName() {
       const supabase = createClient();
@@ -100,27 +111,57 @@ function AppLayoutContent({
       const user = authData.user;
       if (!user || !active) return;
 
-      const { data: profile } = await supabase
-        .from('profiles')
-        .select('full_name')
-        .eq('id', user.id)
-        .maybeSingle();
+      const [profileResult, contractorResult] = await Promise.all([
+        supabase
+          .from('profiles')
+          .select('full_name')
+          .eq('id', user.id)
+          .maybeSingle(),
+        userRole === 'contractor'
+          ? supabase
+          .from('contractor_profiles')
+          .select('business_name, profile_image_path')
+          .eq('profile_id', user.id)
+          .maybeSingle()
+          : Promise.resolve({ data: null, error: null }),
+      ]);
+      const profileError = profileResult.error || contractorResult.error;
+      if (profileError) {
+        console.error(`Unable to load sidebar profile (${profileError.code}): ${profileError.message}`);
+        if (active) setProfileLoaded(true);
+        return;
+      }
 
-      const name = profile?.full_name?.trim()
+      const name = contractorResult.data?.business_name?.trim()
+        || profileResult.data?.full_name?.trim()
         || user.user_metadata?.full_name
         || user.user_metadata?.name
         || user.email?.split('@')[0]
         || userName
         || null;
 
+      const imageUrl = contractorResult.data?.profile_image_path
+        ? resolvePublicStorageUrl('avatars', contractorResult.data.profile_image_path)
+        : '';
       if (active && name) setProfileName(name);
+      if (active && contractorResult.data?.profile_image_path) {
+        setProfileImageUrl(imageUrl);
+      }
+      if (active) {
+        setProfileLoaded(true);
+        try {
+          window.localStorage.setItem(cacheKey, JSON.stringify({ name, imageUrl }));
+        } catch {
+          // Ignore unavailable browser storage.
+        }
+      }
     }
 
     void loadCurrentUserName();
     return () => {
       active = false;
     };
-  }, [userName]);
+  }, [userName, userRole]);
 
   // ONLY WAY TO LOGOUT is via this explicit logout handler
   const handleLogout = async () => {
@@ -150,7 +191,7 @@ function AppLayoutContent({
             group: 'This Project',
             items: [
               { id: 'ho-project-overview', label: 'Overview', href: `${projectPath}?tab=overview`, icon: LayoutDashboard, tab: 'overview' },
-              { id: 'ho-project-contractors', label: 'Contractors', href: `${projectPath}?tab=contractors`, icon: HardHat, tab: 'contractors' },
+              { id: 'ho-project-contractors', label: 'Contractors Proposal', href: `${projectPath}?tab=contractors`, icon: HardHat, tab: 'contractors' },
               { id: 'ho-project-plan', label: 'Project Plan', href: `${projectPath}?tab=project_plan`, icon: FolderKanban, tab: 'project_plan' },
               { id: 'ho-project-milestones', label: 'Milestones', href: `${projectPath}?tab=milestones`, icon: CheckCircle2, tab: 'milestones' },
               { id: 'ho-project-payments', label: 'Payments', href: `${projectPath}?tab=payments`, icon: Landmark, tab: 'payments' },
@@ -185,7 +226,6 @@ function AppLayoutContent({
           group: 'Account',
           items: [
             { id: 'ho-profile', label: 'Profile & Settings', href: '/homeowner/profile', icon: Users },
-            { id: 'ho-notifications', label: 'Notifications', href: '/homeowner/notifications', icon: Bell },
           ]
         }
       ];
@@ -248,10 +288,7 @@ function AppLayoutContent({
             <Menu className="w-5 h-5" />
           </button>
           <Link href={dashboardHomeHref} className="flex items-center gap-2">
-            <div className="w-7 h-7 rounded-lg bg-[#136F48] text-white flex items-center justify-center font-bold text-xs shadow-xs">
-              <Home className="w-4 h-4 text-white" />
-            </div>
-            <span className="font-bold text-slate-900 text-sm tracking-tight">HomeBuildr</span>
+            <BrandLogo className="h-8 w-auto" />
           </Link>
         </div>
 
@@ -277,13 +314,7 @@ function AppLayoutContent({
           {/* Brand Header */}
           <div className="h-16 px-5 border-b border-slate-100/90 flex items-center justify-between shrink-0">
             <Link href={dashboardHomeHref} className="flex items-center gap-2.5 group">
-              <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-emerald-700 to-[#136F48] flex items-center justify-center text-white text-xs font-bold shadow-sm shadow-emerald-900/20 transition-transform duration-200 group-hover:scale-105">
-                <Home className="w-4 h-4 text-white" />
-              </div>
-              <div>
-                <span className="font-extrabold text-slate-900 leading-tight block text-sm tracking-tight">HomeBuildr</span>
-                <span className="text-[10px] text-slate-400 font-medium">Your workspace</span>
-              </div>
+              <BrandLogo className="h-10 w-auto transition-transform duration-200 group-hover:scale-105" />
             </Link>
 
             <button
@@ -414,21 +445,29 @@ function AppLayoutContent({
           </div>
 
           <div className="flex items-center gap-3">
-            <Link
-              href={userRole === 'admin' ? '/admin/notifications' : userRole === 'contractor' ? '/contractor/notifications' : '/homeowner/notifications'}
-              aria-label={unreadCount > 0 ? `${unreadCount} unread notifications` : 'Notifications'}
-              className="relative rounded-xl border border-slate-200 bg-white p-2.5 text-slate-500 shadow-2xs transition hover:border-blue-200 hover:bg-blue-50 hover:text-blue-700"
-            >
-              <Bell className="h-4 w-4" />
-              {unreadCount > 0 && (
-                <span className="absolute -right-1.5 -top-1.5 min-w-4 rounded-full bg-rose-500 px-1 text-center text-[9px] font-bold leading-4 text-white">
-                  {unreadCount > 9 ? '9+' : unreadCount}
-                </span>
-              )}
-            </Link>
+            {userRole === 'admin' && (
+              <Link
+                href="/admin/notifications"
+                aria-label={unreadCount > 0 ? `${unreadCount} unread notifications` : 'Notifications'}
+                className="relative rounded-xl border border-slate-200 bg-white p-2.5 text-slate-500 shadow-2xs transition hover:border-blue-200 hover:bg-blue-50 hover:text-blue-700"
+              >
+                <Bell className="h-4 w-4" />
+                {unreadCount > 0 && (
+                  <span className="absolute -right-1.5 -top-1.5 min-w-4 rounded-full bg-rose-500 px-1 text-center text-[9px] font-bold leading-4 text-white">
+                    {unreadCount > 9 ? '9+' : unreadCount}
+                  </span>
+                )}
+              </Link>
+            )}
             <div className="flex items-center gap-2.5 rounded-xl border border-slate-200 bg-white px-3.5 py-2 text-slate-800 shadow-2xs">
-            <span className="flex h-9 w-9 items-center justify-center rounded-full bg-slate-100 text-slate-500 ring-1 ring-slate-200">
-              <UserRound className="h-4 w-4" aria-hidden="true" />
+            <span className="flex h-9 w-9 items-center justify-center overflow-hidden rounded-full bg-slate-100 text-slate-500 ring-1 ring-slate-200">
+              {profileImageUrl ? (
+                <img src={profileImageUrl} alt="" className="h-full w-full object-cover" />
+              ) : !profileLoaded ? (
+                <span className="h-4 w-4 animate-pulse rounded-full bg-slate-300" aria-hidden="true" />
+              ) : (
+                <UserRound className="h-4 w-4" aria-hidden="true" />
+              )}
             </span>
             <span className="flex min-w-0 flex-col leading-tight">
               <span className="max-w-40 truncate text-xs font-semibold">{displayName}</span>

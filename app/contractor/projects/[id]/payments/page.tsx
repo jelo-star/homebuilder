@@ -425,7 +425,7 @@ function ContractorProjectPaymentsContent() {
 
           <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-xs">
             <div className="flex items-center justify-between text-slate-500 text-xs font-medium">
-              <span>Awaiting Homeowner Release</span>
+              <span>Awaiting Admin Release</span>
               <Clock className="w-4 h-4 text-amber-500" />
             </div>
             <div className="text-2xl font-bold text-amber-600 mt-2">{formatCurrency(awaitingRelease)}</div>
@@ -461,9 +461,6 @@ function ContractorProjectPaymentsContent() {
                   </span>
                   <div>
                     <span className="font-bold text-slate-900 block">{m.name}</span>
-                    <span className="text-[11px] text-slate-400">
-                      {m.description || 'No description provided'}
-                    </span>
                   </div>
                 </div>
 
@@ -516,10 +513,9 @@ function ContractorProjectPaymentsContent() {
           </div>
 
           <div className="overflow-x-auto rounded-xl border border-slate-100">
-            <table className="w-full min-w-[900px] text-left text-xs">
+            <table className="w-full min-w-[800px] text-left text-xs">
               <thead className="bg-slate-50 text-[10px] font-bold uppercase tracking-wider text-slate-500">
                 <tr>
-                  <th className="px-4 py-3">Transaction</th>
                   <th className="px-4 py-3">Payment Method</th>
                   <th className="px-4 py-3">Date</th>
                   <th className="px-4 py-3">Homeowner Payment</th>
@@ -531,20 +527,19 @@ function ContractorProjectPaymentsContent() {
               <tbody className="divide-y divide-slate-100">
                 {transactionLoading ? (
                   <tr>
-                    <td colSpan={7} className="px-4 py-10 text-center text-slate-400">
+                    <td colSpan={6} className="px-4 py-10 text-center text-slate-400">
                       Loading transaction history...
                     </td>
                   </tr>
                 ) : transactionCount === 0 ? (
                   <tr>
-                    <td colSpan={7} className="px-4 py-10 text-center text-slate-400">
+                    <td colSpan={6} className="px-4 py-10 text-center text-slate-400">
                       No transactions recorded for this project yet.
                     </td>
                   </tr>
                 ) : (
                   transactions.map((tx) => (
                     <tr key={tx.id} className="text-slate-600">
-                      <td className="px-4 py-3.5 font-bold text-slate-900">{tx.transaction_ref}</td>
                       <td className="px-4 py-3.5 capitalize">{tx.payment_method.replace('_', ' ')}</td>
                       <td className="px-4 py-3.5">{formatDate(tx.created_at)}</td>
                       <td className="px-4 py-3.5">

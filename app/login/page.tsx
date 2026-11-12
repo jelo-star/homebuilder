@@ -6,7 +6,7 @@ import { useRouter } from 'next/navigation';
 import { createClient } from '@/lib/supabase/client';
 import { normalizeEmail } from '@/lib/utils/email';
 import AuthPageBackdrop from '@/components/auth/AuthPageBackdrop';
-import { House, ArrowRight, ArrowLeft, Lock, Mail, AlertCircle, ShieldCheck, Home, Users } from 'lucide-react';
+import { ArrowRight, ArrowLeft, Lock, Mail, AlertCircle, ShieldCheck, Home, Users } from 'lucide-react';
 
 export default function LoginPage() {
   const router = useRouter();
@@ -79,7 +79,8 @@ export default function LoginPage() {
 
         const role = profile.role;
         const targetRoute = role === 'admin' ? '/admin/dashboard' : role === 'contractor' ? '/contractor/dashboard' : '/homeowner/dashboard';
-        router.push(targetRoute);
+        router.replace(targetRoute);
+        router.refresh();
         return;
       } else {
         setErrorMsg('Authentication succeeded but user record was not found.');
@@ -99,7 +100,7 @@ export default function LoginPage() {
   ];
 
   return (
-    <main className="relative isolate min-h-screen overflow-hidden bg-slate-100 px-5 py-5 sm:px-8 lg:px-10">
+    <main className={`relative isolate min-h-screen overflow-hidden bg-slate-100 px-5 py-5 transition-all duration-500 ease-out sm:px-8 lg:px-10 ${loading ? 'scale-[0.995] opacity-80' : ''}`}>
       <AuthPageBackdrop />
       {errorMsg && (
         <div role="alert" className="fixed right-4 top-4 z-[99999] w-[calc(100%-2rem)] max-w-sm animate-in fade-in slide-in-from-top-2 duration-200">
@@ -121,14 +122,7 @@ export default function LoginPage() {
       )}
 
       <div className="relative z-10 mx-auto flex w-full max-w-[1360px] items-center justify-between">
-        <Link href="/" className="inline-flex items-center gap-3 rounded-xl">
-          <span className="flex h-11 w-11 items-center justify-center text-emerald-800 sm:h-12 sm:w-12">
-            <House className="h-10 w-10 stroke-[2.4] sm:h-11 sm:w-11" />
-          </span>
-          <span className="text-lg font-extrabold tracking-tight text-slate-950 sm:text-xl">
-            HomeBuild<span className="text-emerald-700">r</span>
-          </span>
-        </Link>
+        <div className="w-[140px]" aria-hidden="true" />
         <Link
           href="/"
           className="inline-flex items-center gap-2 rounded-full border border-white/80 bg-white/85 px-4 py-2.5 text-xs font-semibold text-slate-700 shadow-md shadow-slate-900/5 backdrop-blur transition hover:-translate-y-0.5 hover:text-emerald-800 sm:text-sm"

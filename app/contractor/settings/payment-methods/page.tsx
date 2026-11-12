@@ -10,7 +10,8 @@ import {
   Plus, 
   Smartphone,
   Landmark,
-  Trash2
+  Trash2,
+  Pencil
 } from 'lucide-react';
 import { ContractorPayoutAccount } from '@/types/database';
 
@@ -47,6 +48,7 @@ export default function ContractorPaymentMethodsPage() {
   
   // Modal / Form state
   const [showAddModal, setShowAddModal] = useState(false);
+  const [editingAccount, setEditingAccount] = useState<ContractorPayoutAccount | null>(null);
   const [channelCategory, setChannelCategory] = useState<'bank_transfer' | 'ecash'>('bank_transfer');
   const [bankName, setBankName] = useState('');
   const [ecashProvider, setEcashProvider] = useState('GCash');
@@ -124,20 +126,39 @@ export default function ContractorPaymentMethodsPage() {
 
     try {
       const supabase = createClient();
-      const { data, error } = await supabase.rpc('register_contractor_payout_account', {
-        p_payout_method: resolvedMethod,
-        p_bank_name: resolvedProviderName,
-        p_account_name: accountHolderName.trim(),
-        p_account_number_mask: masked,
-      });
+      if (editingAccount) {
+        const { data, error } = await supabase
+          .from('contractor_payout_accounts')
+          .update({
+            payout_method: resolvedMethod,
+            bank_name: resolvedProviderName,
+            account_name: accountHolderName.trim(),
+            account_number_mask: masked,
+            updated_at: new Date().toISOString(),
+          })
+          .eq('id', editingAccount.id)
+          .eq('contractor_id', contractorId)
+          .select()
+          .single();
+        if (error) throw error;
+        setPayoutAccounts(prev => prev.map(account => account.id === editingAccount.id ? data as ContractorPayoutAccount : account));
+        setMessage({ text: 'Payout account updated successfully.', type: 'success' });
+      } else {
+        const { data, error } = await supabase.rpc('register_contractor_payout_account', {
+          p_payout_method: resolvedMethod,
+          p_bank_name: resolvedProviderName,
+          p_account_name: accountHolderName.trim(),
+          p_account_number_mask: masked,
+        });
+        if (error) throw error;
+        const insertedAccount = Array.isArray(data) ? data[0] : data;
+        if (!insertedAccount) throw new Error('Supabase did not return the registered payout account.');
+        setPayoutAccounts(prev => [insertedAccount as ContractorPayoutAccount, ...prev]);
+        setMessage({ text: 'Payout account added successfully.', type: 'success' });
+      }
 
-      if (error) throw error;
-      const insertedAccount = Array.isArray(data) ? data[0] : data;
-      if (!insertedAccount) throw new Error('Supabase did not return the registered payout account.');
-      setPayoutAccounts(prev => [insertedAccount as ContractorPayoutAccount, ...prev]);
-
-      setMessage({ text: 'Payout account added successfully.', type: 'success' });
       setShowAddModal(false);
+      setEditingAccount(null);
       setAccountHolderName('');
       setAccountNumber('');
     } catch (err: unknown) {
@@ -151,6 +172,16 @@ export default function ContractorPaymentMethodsPage() {
     } finally {
       setIsSubmitting(false);
     }
+  };
+
+  const openEditModal = (account: ContractorPayoutAccount) => {
+    setEditingAccount(account);
+    setChannelCategory(account.payout_method === 'bank_transfer' ? 'bank_transfer' : 'ecash');
+    setBankName(account.payout_method === 'bank_transfer' ? account.bank_name || '' : '');
+    setEcashProvider(account.payout_method === 'maya' ? 'Maya' : 'GCash');
+    setAccountHolderName(account.account_name);
+    setAccountNumber(account.account_number_mask);
+    setShowAddModal(true);
   };
 
   const handleDeleteAccount = async (account: ContractorPayoutAccount) => {
@@ -312,6 +343,15 @@ export default function ContractorPaymentMethodsPage() {
                     <div className="flex items-center gap-2 self-end md:self-center">
                       <button
                         type="button"
+                        onClick={() => openEditModal(account)}
+                        aria-label={`Edit ${account.bank_name || 'payout'} account`}
+                        title="Edit payout account"
+                        className="rounded-lg border border-blue-200 p-2 text-blue-700 hover:bg-blue-50"
+                      >
+                        <Pencil className="h-4 w-4" />
+                      </button>
+                      <button
+                        type="button"
                         onClick={() => void handleDeleteAccount(account)}
                         disabled={deletingAccountId === account.id}
                         aria-label={`Delete ${account.bank_name || 'payout'} account ending ${account.account_number_mask.slice(-4)}`}
@@ -336,11 +376,14 @@ export default function ContractorPaymentMethodsPage() {
           <div className="bg-white rounded-2xl border border-slate-200 shadow-2xl max-w-lg w-full overflow-hidden animate-in fade-in zoom-in-95 duration-150">
             <div className="p-6 border-b border-slate-100 flex items-center justify-between">
               <div>
-                <h3 className="font-bold text-slate-900 text-lg">Add Payout Account</h3>
+                <h3 className="font-bold text-slate-900 text-lg">{editingAccount ? 'Edit Payout Account' : 'Add Payout Account'}</h3>
                 <p className="text-xs text-slate-500">Provide payout details for milestone disbursements</p>
               </div>
               <button 
-                onClick={() => setShowAddModal(false)}
+                onClick={() => {
+                  setShowAddModal(false);
+                  setEditingAccount(null);
+                }}
                 className="text-slate-400 hover:text-slate-600 p-1"
               >
                 ✕
@@ -467,7 +510,7 @@ export default function ContractorPaymentMethodsPage() {
                   disabled={isSubmitting}
                   className="px-5 py-2 rounded-xl bg-blue-600 text-white text-sm font-semibold hover:bg-blue-700 transition disabled:opacity-50"
                 >
-                  {isSubmitting ? 'Adding...' : 'Add Payout Account'}
+                  {isSubmitting ? 'Saving...' : editingAccount ? 'Save Changes' : 'Add Payout Account'}
                 </button>
               </div>
             </form>

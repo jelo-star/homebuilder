@@ -222,10 +222,6 @@ function ProjectsDashboard({
     <AppLayout userRole="homeowner" userName="Homeowner" title="My Projects" subtitle="Manage your residential projects, review contractor proposals, and monitor construction progress." showBackButton={false}>
       <div className="mx-auto w-full max-w-[1500px] space-y-6">
         {loadError && <div className="rounded-2xl border border-rose-200 bg-rose-50 p-4 text-sm font-semibold text-rose-700">Project records could not be loaded: {loadError}</div>}
-        <section className="relative overflow-hidden rounded-3xl bg-[#083b72] px-6 py-7 text-white shadow-sm sm:px-9" style={{ backgroundImage: 'linear-gradient(90deg, rgba(4,38,81,.96), rgba(7,62,121,.7), rgba(7,62,121,.15)), url("https://images.unsplash.com/photo-1600607687920-4e2a09cf159d?auto=format&fit=crop&w=1600&q=85")', backgroundPosition: 'center', backgroundSize: 'cover' }}>
-          <h1 className="flex items-center gap-2 text-2xl font-bold tracking-tight sm:text-3xl"><Building2 className="h-7 w-7" /> Your Projects, Our Priority</h1>
-          <p className="mt-2 text-sm text-blue-100">Track progress, stay updated, and build your dream home.</p>
-        </section>
         <section className="flex flex-col gap-4 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm lg:flex-row lg:items-center lg:justify-between">
           <div className="flex min-w-0 gap-2 overflow-x-auto pb-1">
             {[

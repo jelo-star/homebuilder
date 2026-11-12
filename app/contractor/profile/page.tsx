@@ -17,9 +17,12 @@ import {
   FileCheck,
   Calendar,
   Layers,
-  Sparkles
+  Sparkles,
+  Upload
 } from 'lucide-react';
 import { createClient } from '@/lib/supabase/client';
+import { optimizeImage, imagePreview } from '@/lib/image-optimization';
+import { resolvePublicStorageUrl } from '@/lib/supabase/storage';
 import { ContractorProfile, HouseType, FinishLevel, WorkType } from '@/types/database';
 import { formatCurrency, formatNumberInput, parseNumberInput } from '@/lib/utils/formatters';
 
@@ -74,6 +77,16 @@ export default function ContractorProfilePage() {
 
   // Verification & rating metrics (read-only for security)
   const [contractor, setContractor] = React.useState<ContractorProfile | null>(null);
+  const [profileImageFile, setProfileImageFile] = React.useState<File | null>(null);
+  const [coverImageFile, setCoverImageFile] = React.useState<File | null>(null);
+  const [profileImagePreview, setProfileImagePreview] = React.useState('');
+  const [coverImagePreview, setCoverImagePreview] = React.useState('');
+  const [coverImagePosition, setCoverImagePosition] = React.useState('center');
+  const [savedCoverImagePosition, setSavedCoverImagePosition] = React.useState('center');
+  const [removeProfileImage, setRemoveProfileImage] = React.useState(false);
+  const [removeCoverImage, setRemoveCoverImage] = React.useState(false);
+  const [imageSaving, setImageSaving] = React.useState(false);
+  const [imageProgress, setImageProgress] = React.useState(0);
 
   const loadData = React.useCallback(async () => {
     const supabase = createClient();
@@ -99,6 +112,10 @@ export default function ContractorProfilePage() {
       if (data) {
         const c = data as ContractorProfile;
         setContractor(c);
+        setProfileImagePreview(c.profile_image_path ? resolvePublicStorageUrl('avatars', c.profile_image_path) : '');
+        setCoverImagePreview(c.cover_image_path ? resolvePublicStorageUrl('avatars', c.cover_image_path) : '');
+        setCoverImagePosition(c.cover_image_position || 'center');
+        setSavedCoverImagePosition(c.cover_image_position || 'center');
         setPersonalName(c.profiles?.full_name || '');
         setPersonalPhone(c.profiles?.phone || '');
         setPersonalCity(c.profiles?.city || '');
@@ -158,6 +175,32 @@ export default function ContractorProfilePage() {
     setServiceCities(serviceCities.filter(c => c !== cityToRemove));
   };
 
+  const handleProfileImageChange = async (file: File | undefined) => {
+    if (!file) return;
+    try {
+      const optimized = await optimizeImage(file, 'profile');
+      setProfileImageFile(optimized);
+      setProfileImagePreview(imagePreview(optimized));
+      setRemoveProfileImage(false);
+      setErrorMsg('');
+    } catch (error) {
+      setErrorMsg(error instanceof Error ? error.message : 'The profile image could not be prepared.');
+    }
+  };
+
+  const handleCoverImageChange = async (file: File | undefined) => {
+    if (!file) return;
+    try {
+      const optimized = await optimizeImage(file, 'cover');
+      setCoverImageFile(optimized);
+      setCoverImagePreview(imagePreview(optimized));
+      setRemoveCoverImage(false);
+      setErrorMsg('');
+    } catch (error) {
+      setErrorMsg(error instanceof Error ? error.message : 'The cover image could not be prepared.');
+    }
+  };
+
   const toggleSpecialty = (item: HouseType) => {
     setSpecialties(prev => prev.includes(item) ? prev.filter(x => x !== item) : [...prev, item]);
   };
@@ -192,6 +235,8 @@ export default function ContractorProfilePage() {
       const { data: { user }, error: authError } = await supabase.auth.getUser();
       if (authError) throw authError;
       if (!user) throw new Error('Sign in to save your contractor profile.');
+      const previousProfileImagePath = contractor?.profile_image_path ?? null;
+      const previousCoverImagePath = contractor?.cover_image_path ?? null;
 
       const profileUpdates = {
         business_name: businessName.trim(),
@@ -219,6 +264,58 @@ export default function ContractorProfilePage() {
         max_project_budget: parseNumberInput(maxBudget) || null,
         updated_at: new Date().toISOString(),
       };
+
+      if (profileImageFile || coverImageFile || removeProfileImage || removeCoverImage || coverImagePosition !== savedCoverImagePosition) {
+        setImageSaving(true);
+        setImageProgress(10);
+        const imageUpdates: Record<string, string | null> = {};
+        const uploadedPaths: string[] = [];
+        const uploadImage = async (file: File, type: 'profile' | 'cover') => {
+          const optimized = await optimizeImage(file, type);
+          const path = `${user.id}/profile-${type}-${crypto.randomUUID()}.webp`;
+          const { error: uploadError } = await supabase.storage.from('avatars').upload(path, optimized, {
+            cacheControl: '31536000',
+            contentType: 'image/webp',
+            upsert: false,
+          });
+          if (uploadError) throw uploadError;
+          uploadedPaths.push(path);
+          return path;
+        };
+        try {
+          if (profileImageFile) {
+            imageUpdates.profile_image_path = await uploadImage(profileImageFile, 'profile');
+            setImageProgress(45);
+          } else if (removeProfileImage) {
+            imageUpdates.profile_image_path = null;
+          }
+          if (coverImageFile) {
+            imageUpdates.cover_image_path = await uploadImage(coverImageFile, 'cover');
+            setImageProgress(75);
+          } else if (removeCoverImage) {
+            imageUpdates.cover_image_path = null;
+          }
+          if (coverImagePosition !== savedCoverImagePosition && !removeCoverImage) imageUpdates.cover_image_position = coverImagePosition;
+          const { error: imageUpdateError } = await supabase.from('contractor_profiles').update(imageUpdates).eq('profile_id', user.id);
+          if (imageUpdateError) throw imageUpdateError;
+          const pathsToRemove = [
+            previousProfileImagePath && imageUpdates.profile_image_path !== undefined && imageUpdates.profile_image_path !== previousProfileImagePath ? previousProfileImagePath : null,
+            previousCoverImagePath && imageUpdates.cover_image_path !== undefined && imageUpdates.cover_image_path !== previousCoverImagePath ? previousCoverImagePath : null,
+          ].filter((path): path is string => path !== null && !path.startsWith('http') && !path.startsWith('/'));
+          if (pathsToRemove.length) await supabase.storage.from('avatars').remove(pathsToRemove);
+          setImageProgress(100);
+          setProfileImageFile(null);
+          setCoverImageFile(null);
+          setSavedCoverImagePosition(coverImagePosition);
+          setRemoveProfileImage(false);
+          setRemoveCoverImage(false);
+        } catch (imageError) {
+          if (uploadedPaths.length) await supabase.storage.from('avatars').remove(uploadedPaths);
+          throw imageError;
+        } finally {
+          setImageSaving(false);
+        }
+      }
 
       if (contractor) {
         const updateResult = await supabase
@@ -260,7 +357,7 @@ export default function ContractorProfilePage() {
         throw new Error(`Business details were saved, but personal contact details could not be updated: ${personalProfileError.message}`);
       }
 
-      setSuccessMsg('Business profile details updated successfully.');
+      setSuccessMsg('Business profile details and images updated successfully.');
       await loadData();
     } catch (err: unknown) {
       const message = err instanceof Error
@@ -363,6 +460,51 @@ export default function ContractorProfilePage() {
         </div>
 
         <form onSubmit={handleSubmit} className="space-y-3">
+          <section className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-xs">
+            <div className="border-b border-slate-100 px-4 py-3 sm:px-5">
+              <h2 className="text-sm font-bold text-slate-900">Customize public profile</h2>
+              <p className="mt-1 text-xs text-slate-500">Upload a company image and cover photo. Images are resized and converted to WebP before storage.</p>
+            </div>
+            <div className="grid gap-4 p-4 sm:p-5 lg:grid-cols-[220px_1fr]">
+              <div>
+                <p className="text-xs font-bold text-slate-900">Profile image</p>
+                <div className="mt-2 flex items-center gap-3">
+                  <div className="flex h-28 w-28 shrink-0 items-center justify-center overflow-hidden rounded-full bg-[#113d3b] text-4xl font-bold text-white ring-4 ring-slate-100">
+                    {profileImagePreview ? <img src={profileImagePreview} alt="Profile preview" className="h-full w-full object-cover" /> : (businessName.trim().slice(0, 1).toUpperCase() || 'C')}
+                  </div>
+                  <div className="min-w-0">
+                    <label className="inline-flex cursor-pointer items-center gap-2 rounded-lg border border-slate-300 px-3 py-2 text-xs font-bold text-slate-700 hover:bg-slate-50">
+                      <Upload className="h-3.5 w-3.5" /> Upload
+                      <input type="file" accept="image/jpeg,image/png,image/webp" className="sr-only" onChange={event => void handleProfileImageChange(event.target.files?.[0])} />
+                    </label>
+                    {(profileImagePreview || contractor?.profile_image_path) && <button type="button" onClick={() => { setProfileImageFile(null); setProfileImagePreview(''); setRemoveProfileImage(true); }} className="ml-1 text-xs font-semibold text-rose-600 hover:underline">Remove</button>}
+                    <p className="mt-1 text-[10px] text-slate-400">Square logo or business image</p>
+                  </div>
+                </div>
+              </div>
+              <div>
+                <p className="text-xs font-bold text-slate-900">Profile cover image</p>
+                <div className="relative mt-2 h-40 overflow-hidden rounded-xl border border-slate-200 bg-slate-100 sm:h-44">
+                  {coverImagePreview ? <img src={coverImagePreview} alt="Cover preview" className="h-full w-full object-cover" style={{ objectPosition: coverImagePosition }} /> : <div className="flex h-full items-center justify-center text-xs text-slate-400">Default HomeBuildr cover</div>}
+                  <label className="absolute bottom-2 right-2 inline-flex cursor-pointer items-center gap-2 rounded-lg bg-white/95 px-3 py-2 text-xs font-bold text-slate-700 shadow-sm hover:bg-white">
+                    <Upload className="h-3.5 w-3.5" /> Replace cover
+                    <input type="file" accept="image/jpeg,image/png,image/webp" className="sr-only" onChange={event => void handleCoverImageChange(event.target.files?.[0])} />
+                  </label>
+                </div>
+                {(coverImagePreview || contractor?.cover_image_path) && <button type="button" onClick={() => { setCoverImageFile(null); setCoverImagePreview(''); setRemoveCoverImage(true); }} className="mt-1 text-xs font-semibold text-rose-600 hover:underline">Restore default cover</button>}
+                <label className="mt-2 flex items-center gap-2 text-[10px] font-semibold text-slate-500">
+                  Image position
+                  <select value={coverImagePosition} onChange={event => setCoverImagePosition(event.target.value)} className="rounded border border-slate-300 bg-white px-2 py-1 text-[10px] text-slate-700">
+                    <option value="top">Top</option>
+                    <option value="center">Center</option>
+                    <option value="bottom">Bottom</option>
+                  </select>
+                </label>
+                <p className="mt-1 text-[10px] text-slate-400">Wide image recommended. Maximum 1920px wide.</p>
+              </div>
+            </div>
+            {imageSaving && <div className="border-t border-slate-100 px-4 py-2 text-xs text-emerald-700 sm:px-5">Optimizing and saving images… {imageProgress}%</div>}
+          </section>
           <div role="tablist" aria-label="Contractor profile sections" className="grid grid-cols-2 gap-2 rounded-2xl border border-slate-200 bg-white p-2 shadow-xs lg:grid-cols-4">
             {[
               { id: 'personal', label: 'Personal details', detail: 'Account holder' },
@@ -797,14 +939,16 @@ export default function ContractorProfilePage() {
               </div>
 
               <div>
-                <label className="block text-xs font-bold text-slate-900 mb-1">Direct Field Personnel</label>
+                <label className="block text-xs font-bold text-slate-900 mb-1">Team Capacity</label>
                 <input
                   type="number"
-                  min="1"
+                  min="0"
                   value={teamCapacity}
                   onChange={(e) => setTeamCapacity(Number(e.target.value))}
+                  placeholder="Number of team members"
                   className="w-full text-xs p-2.5 border border-slate-300 rounded-xl"
                 />
+                <p className="mt-1 text-[10px] text-slate-500">Enter the number of people on your construction team.</p>
               </div>
 
               <div>

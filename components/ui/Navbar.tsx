@@ -4,6 +4,7 @@ import React from 'react';
 import Link from 'next/link';
 import { createClient } from '@/lib/supabase/client';
 import { UserRole } from '@/types/database';
+import BrandLogo from '@/components/ui/BrandLogo';
 import { 
   Building2, 
   Home, 
@@ -145,17 +146,11 @@ export default function Navbar({ userRole, userName, unreadCount = 0 }: NavbarPr
 
   return (
     <nav className="bg-white border-b border-slate-200 sticky top-0 z-50">
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-        <div className="flex justify-between h-16">
+      <div className="mx-auto w-full max-w-[1440px] px-4 sm:px-6 lg:px-12 xl:px-20">
+        <div className="flex h-14 justify-between">
           <div className="flex items-center">
             <Link href="/" className="flex items-center gap-2.5 group">
-              <div className="w-9 h-9 rounded-xl bg-[#136F48] flex items-center justify-center text-white shadow-md shadow-emerald-900/10 group-hover:scale-105 transition-transform">
-                <Home className="w-5 h-5 text-white" />
-              </div>
-              <div className="flex flex-col">
-                <span className="font-extrabold text-slate-900 leading-tight tracking-tight text-xl">HomeBuildr</span>
-                <span className="text-[10px] text-emerald-700 font-semibold tracking-wider">Your Home. Our Trusted Experts.</span>
-              </div>
+              <BrandLogo className="h-[42px] w-[170px] transition-transform group-hover:scale-105" />
             </Link>
 
             {/* Desktop Navigation */}
@@ -176,15 +171,17 @@ export default function Navbar({ userRole, userName, unreadCount = 0 }: NavbarPr
           <div className="hidden md:flex md:items-center md:space-x-4">
             {isAuthenticated ? (
               <div className="flex items-center gap-3">
-                <Link
-                  href={effectiveRole === 'admin' ? '/admin/notifications' : effectiveRole === 'contractor' ? '/contractor/notifications' : '/homeowner/notifications'}
-                  className="relative p-2 rounded-lg text-slate-500 hover:text-emerald-700 hover:bg-slate-50 transition-colors"
-                >
-                  <Bell className="w-5 h-5" />
-                  {unreadCount > 0 && (
-                    <span className="absolute top-1 right-1 w-2 h-2 bg-red-500 rounded-full ring-2 ring-white" />
-                  )}
-                </Link>
+                {effectiveRole === 'admin' && (
+                  <Link
+                    href="/admin/notifications"
+                    className="relative p-2 rounded-lg text-slate-500 hover:text-emerald-700 hover:bg-slate-50 transition-colors"
+                  >
+                    <Bell className="w-5 h-5" />
+                    {unreadCount > 0 && (
+                      <span className="absolute top-1 right-1 w-2 h-2 bg-red-500 rounded-full ring-2 ring-white" />
+                    )}
+                  </Link>
+                )}
 
                 <div className="flex items-center gap-2.5 rounded-xl px-2 py-1">
                   <span className="flex h-9 w-9 items-center justify-center rounded-full bg-slate-100 text-slate-500 ring-1 ring-slate-200">

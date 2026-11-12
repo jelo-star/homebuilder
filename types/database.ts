@@ -7,7 +7,7 @@ export type FinishLevel = 'basic' | 'standard' | 'premium';
 export type StartWindow = 'asap' | 'in_2_months' | 'in_6_months';
 export type ProjectStatus = 'draft' | 'open' | 'quoted' | 'awarded' | 'project_planning' | 'in_progress' | 'completed' | 'cancelled' | 'disputed';
 export type QuoteStatus = 'requested' | 'draft' | 'submitted' | 'revision_requested' | 'revised' | 'accepted' | 'declined' | 'rejected' | 'expired' | 'withdrawn';
-export type MilestoneStatus = 'locked' | 'in_progress' | 'proof_submitted' | 'approved' | 'disputed' | 'paid' | 'refunded';
+export type MilestoneStatus = 'locked' | 'in_progress' | 'proof_submitted' | 'payment_verification_pending' | 'approved' | 'disputed' | 'paid' | 'refunded';
 export type PaymentMethod = 'gcash' | 'maya' | 'bank_transfer' | 'card';
 export type PaymentStatus = 'pending' | 'held' | 'released' | 'refunded' | 'failed';
 export type LedgerEntryType = 'deposit' | 'release' | 'refund' | 'fee';
@@ -52,6 +52,9 @@ export interface ContractorProfile {
   accepted_project_types?: string[];
   min_project_budget?: number;
   max_project_budget?: number;
+  profile_image_path?: string | null;
+  cover_image_path?: string | null;
+  cover_image_position?: string | null;
   verification_status: VerificationStatus;
   verified_at?: string | null;
   verified_by?: string | null;
@@ -740,6 +743,7 @@ export interface PaymentTransactionRecord {
   project_id: string;
   contract_id?: string | null;
   milestone_id?: string | null;
+  milestone_approval_requested?: boolean;
   payer_id: string;
   recipient_id?: string | null;
   amount_centavos: number;

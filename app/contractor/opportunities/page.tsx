@@ -368,19 +368,21 @@ export default function OpportunitiesPage() {
                   {/* Actions Bar */}
                   <div className="px-6 pb-6 pt-3 border-t border-slate-100 space-y-2">
                     {existingQuote ? (
-                      <div className="p-3 rounded-xl bg-emerald-50 border border-emerald-200 text-center text-xs">
-                        <div className="font-bold text-emerald-800 flex items-center justify-center gap-1">
-                          <CheckCircle2 className="w-3.5 h-3.5" />
-                          <span>Cost Breakdown & Proposal Submitted</span>
-                        </div>
-                        <div className="text-emerald-700 font-semibold mt-0.5">
-                          {formatCurrency(existingQuote.price)}
+                      <div className="flex items-center justify-between gap-3 rounded-xl border border-emerald-200 bg-emerald-50/70 px-3.5 py-3">
+                        <div className="min-w-0">
+                          <div className="flex items-center gap-1.5 text-[11px] font-bold uppercase tracking-wide text-emerald-800">
+                            <CheckCircle2 className="h-4 w-4 shrink-0 text-emerald-600" />
+                            <span>Proposal submitted</span>
+                          </div>
+                          <div className="mt-1 text-sm font-extrabold text-slate-900">
+                            {formatCurrency(existingQuote.price)}
+                          </div>
                         </div>
                         <Link
                           href={`/contractor/opportunities/${p.id}`}
-                          className="text-[11px] text-emerald-800 underline hover:text-emerald-900 mt-1 block"
+                          className="shrink-0 rounded-lg border border-emerald-300 bg-white px-3 py-2 text-[11px] font-bold text-emerald-800 transition hover:bg-emerald-100"
                         >
-                          View or Revise Cost Breakdown
+                          View / Revise
                         </Link>
                       </div>
                     ) : (

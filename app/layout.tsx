@@ -15,6 +15,10 @@ const geistMono = Geist_Mono({
 export const metadata: Metadata = {
   title: "HomeBuildr — Find Trusted Home Contractors Near You",
   description: "Discover verified contractors, compare portfolios, track construction milestones and manage payments with HomeBuildr.",
+  icons: {
+    icon: "/homebuilder-icon.png",
+    apple: "/homebuilder-icon.png",
+  },
 };
 
 import { ToastProvider } from "@/components/ui/ToastProvider";

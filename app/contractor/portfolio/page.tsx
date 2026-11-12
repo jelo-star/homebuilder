@@ -17,6 +17,7 @@ import {
 } from 'lucide-react';
 import { createClient } from '@/lib/supabase/client';
 import { resolvePortfolioImageUrl } from '@/lib/supabase/storage';
+import { optimizeImage } from '@/lib/image-optimization';
 import { PortfolioItem, HouseType } from '@/types/database';
 
 export default function ContractorPortfolioPage() {
@@ -117,7 +118,10 @@ function ContractorPortfolioContent() {
   }, []);
 
   React.useEffect(() => {
-    loadData();
+    const timer = window.setTimeout(() => {
+      void loadData();
+    }, 0);
+    return () => window.clearTimeout(timer);
   }, [loadData]);
 
   React.useEffect(() => {
@@ -148,11 +152,11 @@ function ContractorPortfolioContent() {
       // Resolve image path from the uploaded file or an explicitly provided URL.
       let finalImagePath = imageUrl.trim();
       if (imageFile) {
-        const fileExt = imageFile.name.split('.').pop();
-        const storagePath = `${user.id}/${Date.now()}_portfolio.${fileExt}`;
+        const optimizedImage = await optimizeImage(imageFile, 'portfolio');
+        const storagePath = `${user.id}/${Date.now()}_portfolio.webp`;
         const { error: uploadErr } = await supabase.storage
           .from('portfolio')
-          .upload(storagePath, imageFile, { upsert: true });
+          .upload(storagePath, optimizedImage, { cacheControl: '31536000', contentType: 'image/webp', upsert: false });
         if (uploadErr) throw uploadErr;
         const { data: { publicUrl } } = supabase.storage.from('portfolio').getPublicUrl(storagePath);
         finalImagePath = publicUrl;

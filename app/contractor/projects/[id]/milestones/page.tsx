@@ -22,6 +22,7 @@ import {
   Info
 } from 'lucide-react';
 import { createClient } from '@/lib/supabase/client';
+import { optimizeImage } from '@/lib/image-optimization';
 import { Project, Milestone, MilestoneProof, Quote, Dispute, ContractorProfile } from '@/types/database';
 import { formatCurrency, formatDate } from '@/lib/utils/formatters';
 
@@ -357,21 +358,23 @@ function ContractorMilestonesContent() {
       const proofRecords = [];
       for (const [index, image] of proofImages.entries()) {
         const storagePath = `${user.id}/${activeMilestone.id}/${Date.now()}_${index + 1}_${image.name}`;
-        const imageBlob = await fetch(image.dataUrl).then(response => response.blob());
+        const imageFile = new File([await fetch(image.dataUrl).then(response => response.blob())], image.name, { type: 'image/jpeg' });
+        const imageBlob = await optimizeImage(imageFile, 'portfolio');
+        const optimizedStoragePath = storagePath.replace(/\.[^.]+$/, '.webp');
         const { error: uploadError } = await supabase.storage
           .from('milestone-proofs')
-          .upload(storagePath, imageBlob, { contentType: 'image/jpeg' });
+          .upload(optimizedStoragePath, imageBlob, { contentType: 'image/webp' });
         if (uploadError) {
           if (uploadError.message.toLowerCase().includes('bucket not found')) {
             throw new Error('Milestone proof storage is not configured. Apply migration 63_restore_milestone_proofs_bucket.sql, then try again.');
           }
           throw uploadError;
         }
-        uploadedStoragePaths.push(storagePath);
+        uploadedStoragePaths.push(optimizedStoragePath);
         proofRecords.push({
           milestone_id: activeMilestone.id,
           uploaded_by: user.id,
-          file_path: storagePath,
+          file_path: optimizedStoragePath,
           note: proofNote.trim() || null,
         });
       }
@@ -574,6 +577,7 @@ function ContractorMilestonesContent() {
               const isLocked = m.status === 'locked';
               const isInProgress = m.status === 'in_progress';
               const isProofSubmitted = m.status === 'proof_submitted';
+              const isPaymentVerificationPending = m.status === 'payment_verification_pending';
               const isApproved = m.status === 'approved';
               const isPaid = m.status === 'paid';
               const isDisputed = m.status === 'disputed';
@@ -598,7 +602,7 @@ function ContractorMilestonesContent() {
                             ? 'bg-emerald-500 text-white'
                             : isInProgress
                             ? 'bg-[#136F48] text-white'
-                            : isProofSubmitted
+                            : isProofSubmitted || isPaymentVerificationPending
                             ? 'bg-blue-600 text-white'
                             : 'bg-slate-100 text-slate-600'
                         }`}
@@ -615,7 +619,7 @@ function ContractorMilestonesContent() {
                                 ? 'bg-emerald-100 text-emerald-800'
                                 : isApproved
                                 ? 'bg-teal-100 text-teal-800'
-                                : isProofSubmitted
+                                : isProofSubmitted || isPaymentVerificationPending
                                 ? 'bg-blue-100 text-blue-800'
                                 : isDisputed
                                 ? 'bg-amber-100 text-amber-800'
@@ -624,7 +628,9 @@ function ContractorMilestonesContent() {
                                 : 'bg-slate-100 text-slate-500'
                             }`}
                           >
-                            {m.status.replace('_', ' ')}
+                            {isPaymentVerificationPending
+                              ? 'Pending Admin Payment Verification'
+                              : m.status.replace('_', ' ')}
                           </span>
                         </div>
 
@@ -664,6 +670,13 @@ function ContractorMilestonesContent() {
                         <div className="px-3.5 py-2 rounded-xl bg-blue-50 border border-blue-200 text-blue-700 text-xs font-bold flex items-center gap-1.5">
                           <Clock className="w-3.5 h-3.5 text-blue-600" />
                           <span>Awaiting Homeowner Inspection</span>
+                        </div>
+                      )}
+
+                      {isPaymentVerificationPending && (
+                        <div className="px-3.5 py-2 rounded-xl bg-amber-50 border border-amber-200 text-amber-800 text-xs font-bold flex items-center gap-1.5">
+                          <Clock className="w-3.5 h-3.5 text-amber-600" />
+                          <span>Pending Admin Payment Verification</span>
                         </div>
                       )}
 

@@ -40,7 +40,7 @@ function getProjectDisplayStatus(status: string, milestoneStatuses: MilestoneSta
   if (milestoneStatuses.length === 0) return 'Planning';
   if (
     status === 'completed' ||
-    milestoneStatuses.every(milestoneStatus => ['approved', 'paid'].includes(milestoneStatus))
+    milestoneStatuses.every(milestoneStatus => milestoneStatus === 'paid')
   ) {
     return 'Complete';
   }
@@ -59,7 +59,6 @@ function getErrorMessage(error: unknown): string {
 export default function ContractorDashboard() {
   const [loadError, setLoadError] = React.useState('');
   const [loading, setLoading] = React.useState(true);
-  const [unreadCount, setUnreadCount] = React.useState(0);
   const [contractor, setContractor] = React.useState<ContractorProfile | null>(null);
   const [activeProjects, setActiveProjects] = React.useState<EnrichedActiveProject[]>([]);
   const [, setUnawardedProjects] = React.useState<EnrichedUnawardedProject[]>([]);
@@ -80,69 +79,39 @@ export default function ContractorDashboard() {
       if (authError) throw authError;
       if (!user) throw new Error('Your session has expired. Please sign in again.');
 
-      const { count: unreadNotifications, error: unreadNotificationsError } = await supabase
-        .from('notifications')
-        .select('id', { count: 'exact', head: true })
-        .eq('user_id', user.id)
-        .is('read_at', null);
-      if (unreadNotificationsError) throw unreadNotificationsError;
-      setUnreadCount(unreadNotifications || 0);
-
-      // 1. Fetch Contractor Profile
-      let currentCont: ContractorProfile | null = null;
-      if (user) {
-        const { data: cData, error: contractorError } = await supabase
+      const [contractorResult, quotesResult, payoutsResult, projectsResult] = await Promise.all([
+        supabase
           .from('contractor_profiles')
           .select('business_name')
           .eq('profile_id', user.id)
-          .maybeSingle();
-        if (contractorError) throw contractorError;
-        if (cData) currentCont = cData as ContractorProfile;
-      }
-      setContractor(currentCont);
-
-      // 2. Fetch All Quotes by Contractor
-      let quotes: Quote[] = [];
-      let totalEarnings = 0;
-      if (user) {
-        const { data: qData, error: quotesError } = await supabase
+          .maybeSingle(),
+        supabase
           .from('quotes')
           .select('id, project_id, status, price')
           .eq('contractor_id', user.id)
-          .order('created_at', { ascending: false });
-        if (quotesError) throw quotesError;
-        if (qData) quotes = qData as Quote[];
-
-        const { data: payoutData, error: payoutsError } = await supabase
+          .order('created_at', { ascending: false }),
+        supabase
           .from('payouts')
           .select('net_amount')
           .eq('contractor_id', user.id)
-          .eq('status', 'sent');
-        if (payoutsError) throw payoutsError;
-        totalEarnings = (payoutData || []).reduce((sum, payout) => sum + (Number(payout.net_amount) || 0), 0);
-      }
-
-      // 3. Fetch All Projects
-      let allProjects: Project[] = [];
-      if (user) {
-        const { data: pData, error: projectsError } = await supabase
+          .eq('status', 'sent'),
+        supabase
           .from('projects')
           .select('id, title, status, awarded_quote_id, homeowner_id, budget, est_mid, city, province')
-          .order('created_at', { ascending: false });
-        if (projectsError) throw projectsError;
-          if (pData) allProjects = pData as Project[];
-      }
+          .order('created_at', { ascending: false }),
+      ]);
+      const initialError = contractorResult.error || quotesResult.error || payoutsResult.error || projectsResult.error;
+      if (initialError) throw initialError;
 
-        // Read profiles to resolve homeowner names
-        let profiles: Profile[] = [];
-        if (user) {
-          const homeownerIds = [...new Set(allProjects.map(project => project.homeowner_id))];
-          if (homeownerIds.length > 0) {
-            const { data: profData, error: profilesError } = await supabase.from('profiles').select('id, full_name').in('id', homeownerIds);
-            if (profilesError) throw profilesError;
-            if (profData) profiles = profData as Profile[];
-          }
-      }
+      const currentCont = (contractorResult.data || null) as ContractorProfile | null;
+      setContractor(currentCont);
+
+      const quotes = (quotesResult.data || []) as Quote[];
+      const totalEarnings = (payoutsResult.data || []).reduce(
+        (sum, payout) => sum + (Number(payout.net_amount) || 0),
+        0,
+      );
+      const allProjects = (projectsResult.data || []) as Project[];
 
       const acceptedQuoteProjectIds = new Set<string>();
       const contractorQuoteIds = new Set<string>();
@@ -158,8 +127,6 @@ export default function ContractorDashboard() {
           }
         }
       }
-      const profileById = new Map(profiles.map(profile => [profile.id, profile]));
-
       // SECTION 1: Active Projects
       // Only projects that have been officially awarded to this contractor
       const awardedRaw = allProjects.filter(p => {
@@ -169,18 +136,27 @@ export default function ContractorDashboard() {
 
       const activeList = awardedRaw;
       const awardedProjectIds = activeList.map(project => project.id);
+      const homeownerIds = [...new Set(activeList.map(project => project.homeowner_id))];
+      const [profilesResult, milestonesResult] = await Promise.all([
+        homeownerIds.length > 0
+          ? supabase.from('profiles').select('id, full_name').in('id', homeownerIds)
+          : Promise.resolve({ data: [], error: null }),
+        awardedProjectIds.length > 0
+          ? supabase
+              .from('milestones')
+              .select('project_id, status')
+              .in('project_id', awardedProjectIds)
+          : Promise.resolve({ data: [], error: null }),
+      ]);
+      const enrichmentError = profilesResult.error || milestonesResult.error;
+      if (enrichmentError) throw enrichmentError;
+      const profiles = (profilesResult.data || []) as Profile[];
+      const profileById = new Map(profiles.map(profile => [profile.id, profile]));
       const milestoneStatusesByProjectId = new Map<string, MilestoneStatus[]>();
-      if (awardedProjectIds.length > 0) {
-        const { data: milestoneData, error: milestonesError } = await supabase
-          .from('milestones')
-          .select('project_id, status')
-          .in('project_id', awardedProjectIds);
-        if (milestonesError) throw milestonesError;
-        for (const milestone of (milestoneData || []) as { project_id: string; status: MilestoneStatus }[]) {
-          const statuses = milestoneStatusesByProjectId.get(milestone.project_id) || [];
-          statuses.push(milestone.status);
-          milestoneStatusesByProjectId.set(milestone.project_id, statuses);
-        }
+      for (const milestone of (milestonesResult.data || []) as { project_id: string; status: MilestoneStatus }[]) {
+        const statuses = milestoneStatusesByProjectId.get(milestone.project_id) || [];
+        statuses.push(milestone.status);
+        milestoneStatusesByProjectId.set(milestone.project_id, statuses);
       }
 
       const enrichedActive: EnrichedActiveProject[] = activeList.map(p => {
@@ -239,7 +215,6 @@ export default function ContractorDashboard() {
     <AppLayout
       userRole="contractor"
       userName={contractor?.business_name || 'Contractor'}
-      unreadCount={unreadCount}
       title="Contractor Dashboard"
       subtitle="Manage your active projects and review available opportunities."
       showBackButton={false}

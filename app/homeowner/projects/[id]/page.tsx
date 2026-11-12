@@ -16,7 +16,6 @@ import {
   CreditCard,
   AlertTriangle,
   FileCheck,
-  Star,
   Eye,
   X,
   FileSpreadsheet,
@@ -40,7 +39,7 @@ import {
   Send
 } from 'lucide-react';
 import { createClient } from '@/lib/supabase/client';
-import { resolvePortfolioImageUrl } from '@/lib/supabase/storage';
+import { resolvePortfolioImageUrl, resolvePublicStorageUrl } from '@/lib/supabase/storage';
 import { Project, Quote, Milestone, ContractorProfile, ConfiguredPaymentMethod, MilestoneProof, Dispute, ProjectPlan, ProjectPlanComment } from '@/types/database';
 import { formatCurrency, formatDate, formatNumberInput, parseNumberInput, capitalize, cleanMilestoneTitle, removeUnderscore } from '@/lib/utils/formatters';
 import { calculateEstimate } from '@/lib/utils/estimator';
@@ -113,6 +112,7 @@ function ProjectDetailsContent() {
   const [project, setProject] = React.useState<Project | null>(null);
   const [quotes, setQuotes] = React.useState<(Quote & { contractor_profile: ContractorProfile | null })[]>([]);
   const [contractorPreviewImages, setContractorPreviewImages] = React.useState<Record<string, string>>({});
+  const [contractorProfileImages, setContractorProfileImages] = React.useState<Record<string, string>>({});
   const [milestones, setMilestones] = React.useState<Milestone[]>([]);
   const [loadingProofMilestones, setLoadingProofMilestones] = React.useState<Record<string, boolean>>({});
   const [projectTransactions, setProjectTransactions] = React.useState<any[]>([]);
@@ -137,6 +137,7 @@ function ProjectDetailsContent() {
   const [disputeSubmitting, setDisputeSubmitting] = React.useState(false);
   const [milestoneToApprove, setMilestoneToApprove] = React.useState<Milestone | null>(null);
   const [selectedMilestoneForPayment, setSelectedMilestoneForPayment] = React.useState<Milestone | null>(null);
+  const [payAndApproveMilestoneId, setPayAndApproveMilestoneId] = React.useState<string | null>(null);
   const [acceptingQuoteId, setAcceptingQuoteId] = React.useState<string | null>(null);
   const [confirmQuoteToAccept, setConfirmQuoteToAccept] = React.useState<(Quote & { contractor_profile: ContractorProfile }) | null>(null);
 
@@ -178,10 +179,14 @@ function ProjectDetailsContent() {
   // Feedback notifications
   const [errorMsg, setErrorMsg] = React.useState('');
   const [successMsg, setSuccessMsg] = React.useState('');
+  const [loadingTabData, setLoadingTabData] = React.useState(false);
 
   // Payment proof form
   const [configuredMethods, setConfiguredMethods] = React.useState<ConfiguredPaymentMethod[]>([]);
   const [selectedMethodId, setSelectedMethodId] = React.useState<string>('');
+  const [loadingPaymentMethods, setLoadingPaymentMethods] = React.useState(false);
+  const [paymentMethodsError, setPaymentMethodsError] = React.useState('');
+  const [paymentAllocationMode, setPaymentAllocationMode] = React.useState<'full' | 'milestone'>('milestone');
   const selectedPaymentMethod = configuredMethods.find(method => method.id === selectedMethodId) || null;
   const [copiedId, setCopiedId] = React.useState<string | null>(null);
 
@@ -198,6 +203,7 @@ function ProjectDetailsContent() {
 
   const loadedPreviewContractorsRef = React.useRef(new Set<string>());
   const loadedProofMilestonesRef = React.useRef(new Set<string>());
+  const loadedProjectTabsRef = React.useRef(new Set<string>());
   const paymentSlipInputRef = React.useRef<HTMLInputElement>(null);
   const paymentCameraInputRef = React.useRef<HTMLInputElement>(null);
 
@@ -232,7 +238,7 @@ function ProjectDetailsContent() {
           setProofForm(prev => ({
             ...prev,
             proofFileUrl: compressedBase64,
-            proofFileName: `${file.name.replace(/\.[^/.]+$/, '')}_slip.jpg (${sizeKb} KB)`
+            proofFileName: 'Payment receipt image'
           }));
           showToast(`Deposit receipt optimized & attached (${sizeKb} KB)`, 'success', 'Photo Attached');
         }
@@ -255,6 +261,7 @@ function ProjectDetailsContent() {
     setErrorMsg('');
     loadedPreviewContractorsRef.current.clear();
     loadedProofMilestonesRef.current.clear();
+    loadedProjectTabsRef.current.clear();
     setContractorPreviewImages({});
     setLoadingProofMilestones({});
     const supabase = createClient();
@@ -313,35 +320,22 @@ function ProjectDetailsContent() {
       }
       setProject(projectData as Project);
 
-      const quotesPromise = supabase.from('quotes').select('*').eq('project_id', projectId);
-      const relatedDataPromise = Promise.all([
+      const [quotesResult, milestonesResult, planResult] = await Promise.all([
+        supabase.from('quotes').select('*').eq('project_id', projectId),
         supabase.from('milestones').select('*').eq('project_id', projectId).order('seq', { ascending: true }),
-        supabase.from('payment_transactions').select('*').eq('project_id', projectId).order('created_at', { ascending: false }),
-        supabase.from('disputes').select('*').eq('project_id', projectId).order('created_at', { ascending: false }),
-        supabase.from('payment_methods').select('*').eq('is_active', true).order('sort_order', { ascending: true }),
         supabase.from('project_plans').select('*').eq('project_id', projectId).maybeSingle(),
-        supabase.from('project_plan_comments').select('*').eq('project_id', projectId).order('created_at', { ascending: true }),
       ]);
-
-      const quotesResult = await quotesPromise;
+      const queryError = quotesResult.error || milestonesResult.error || planResult.error;
+      if (queryError) throw queryError;
       const loadedQuotes = (quotesResult.data || []) as Quote[];
       const contractorIds = [...new Set(loadedQuotes.map(quote => quote.contractor_id))];
       const profilesPromise = contractorIds.length > 0
         ? supabase
           .from('homeowner_contractor_profiles')
-          .select('profile_id, business_name, trade_name, authorized_representative, business_email, business_phone, business_address, license_no, pcab_license_no, pcab_category, verification_status, rating_avg, rating_count, years_experience, service_cities, province')
+          .select('profile_id, business_name, authorized_representative, business_email, business_phone, business_address, license_no, pcab_license_no, pcab_category, verification_status, years_experience, service_cities, province, profile_image_path, cover_image_path, cover_image_position')
           .in('profile_id', contractorIds)
         : Promise.resolve({ data: null, error: null });
-      const [
-        [milestonesResult, transactionsResult, disputesResult, methodsResult, planResult, commentsResult],
-        profilesResult,
-      ] = await Promise.all([relatedDataPromise, profilesPromise]);
-
-      const queryError = quotesResult.error || milestonesResult.error || transactionsResult.error ||
-        disputesResult.error || methodsResult.error || planResult.error || commentsResult.error;
-      if (queryError) throw queryError;
-
-      const loadedMethods = (methodsResult.data || []) as ConfiguredPaymentMethod[];
+      const profilesResult = await profilesPromise;
       let contractorProfiles: ContractorProfile[] = [];
       if (!profilesResult.error) {
         contractorProfiles = (profilesResult.data || []) as ContractorProfile[];
@@ -351,20 +345,29 @@ function ProjectDetailsContent() {
         ...quote,
         contractor_profile: contractorById.get(quote.contractor_id) || null
       })));
+      const profileImages = Object.fromEntries(
+        contractorProfiles
+          .filter(profile => profile.profile_image_path)
+          .map(profile => [profile.profile_id, resolvePublicStorageUrl('avatars', profile.profile_image_path!)])
+      );
+      setContractorProfileImages(profileImages);
+      const coverImages = Object.fromEntries(
+        contractorProfiles
+          .filter(profile => profile.cover_image_path)
+          .map(profile => [profile.profile_id, resolvePublicStorageUrl('avatars', profile.cover_image_path!)])
+      );
+      setContractorPreviewImages(coverImages);
       const loadedPlan = (planResult.data || null) as ProjectPlan | null;
       setMilestones(
         loadedPlan && ['submitted', 'approved', 'revision_requested'].includes(loadedPlan.status)
           ? (milestonesResult.data || []) as Milestone[]
           : []
       );
-      setProjectTransactions(transactionsResult.data || []);
-      setDisputes((disputesResult.data || []) as Dispute[]);
-      setConfiguredMethods(loadedMethods);
-      setSelectedMethodId(current =>
-        loadedMethods.some(method => method.id === current) ? current : loadedMethods[0]?.id || ''
-      );
+      setProjectTransactions([]);
+      setDisputes([]);
+      setConfiguredMethods([]);
       setProjectPlan(loadedPlan);
-      setPlanComments((commentsResult.data || []) as ProjectPlanComment[]);
+      setPlanComments([]);
     } catch (error) {
       setErrorMsg(error instanceof Error ? error.message : 'Project records could not be loaded.');
       setQuotes([]);
@@ -382,6 +385,119 @@ function ProjectDetailsContent() {
   React.useEffect(() => {
     loadData();
   }, [loadData]);
+
+  React.useEffect(() => {
+    if (loading || !project) return;
+
+    const tab = activeTab === 'payments' || isPaymentModalOpen
+      ? 'payments'
+      : activeTab === 'disputes' || activeTab === 'project_plan'
+        ? activeTab
+        : null;
+    if (!tab || (tab !== 'payments' && loadedProjectTabsRef.current.has(tab))) return;
+
+    let active = true;
+    setLoadingTabData(true);
+    const loadTabData = async () => {
+      try {
+        const supabase = createClient();
+        if (tab === 'payments') {
+          const transactionsResult = await supabase
+            .from('payment_transactions')
+            .select('*')
+            .eq('project_id', projectId)
+            .order('created_at', { ascending: false });
+          if (transactionsResult.error) throw transactionsResult.error;
+          if (!active) return;
+          setProjectTransactions(transactionsResult.data || []);
+        } else if (tab === 'disputes') {
+          const { data, error } = await supabase
+            .from('disputes')
+            .select('*')
+            .eq('project_id', projectId)
+            .order('created_at', { ascending: false });
+          if (error) throw error;
+          if (!active) return;
+          setDisputes((data || []) as Dispute[]);
+        } else {
+          const { data, error } = await supabase
+            .from('project_plan_comments')
+            .select('*')
+            .eq('project_id', projectId)
+            .order('created_at', { ascending: true });
+          if (error) throw error;
+          if (!active) return;
+          setPlanComments((data || []) as ProjectPlanComment[]);
+        }
+        if (tab !== 'payments') loadedProjectTabsRef.current.add(tab);
+      } catch (error) {
+        if (active) {
+          setErrorMsg(error instanceof Error ? error.message : `Could not load ${tab.replace('_', ' ')} data.`);
+        }
+      } finally {
+        if (active) setLoadingTabData(false);
+      }
+    };
+
+    void loadTabData();
+    return () => {
+      active = false;
+      setLoadingTabData(false);
+    };
+  }, [activeTab, isPaymentModalOpen, loading, project, projectId]);
+
+  React.useEffect(() => {
+    if (!isPaymentModalOpen) return;
+
+    let active = true;
+    setLoadingPaymentMethods(true);
+    setPaymentMethodsError('');
+
+    const loadActivePaymentMethods = async () => {
+      try {
+        const { data, error } = await createClient()
+          .from('payment_methods')
+          .select('id, code, display_name, category, bank_or_provider_name, account_holder_name, account_number_or_id, qr_code_url, payment_instructions, min_amount, max_amount, transaction_fee_pct, transaction_fee_fixed, is_active, requires_proof, requires_admin_verification, sort_order, created_at, updated_at')
+          .eq('is_active', true)
+          .order('sort_order', { ascending: true });
+        if (error) throw error;
+        if (!active) return;
+
+        const methods = (data || []) as ConfiguredPaymentMethod[];
+        setConfiguredMethods(methods);
+        setSelectedMethodId(current =>
+          methods.some(method => method.id === current) ? current : methods[0]?.id || ''
+        );
+      } catch (error) {
+        if (!active) return;
+        const errorData = typeof error === 'object' && error !== null
+          ? error as Record<string, unknown>
+          : {};
+        const getErrorField = (field: 'message' | 'details' | 'hint' | 'code') =>
+          typeof errorData[field] === 'string'
+            ? errorData[field] as string
+            : '';
+        const message = error instanceof Error ? error.message : getErrorField('message');
+        const details = getErrorField('details');
+        const hint = getErrorField('hint');
+        const code = getErrorField('code');
+        console.error('Unable to load active payment methods:', { message, details, hint, code });
+        setConfiguredMethods([]);
+        setSelectedMethodId('');
+        setPaymentMethodsError(
+          [message, details, hint].filter(Boolean).join(' — ') ||
+          'Payment methods could not be loaded. Confirm the payment_methods table grants authenticated users read access.'
+        );
+      } finally {
+        if (active) setLoadingPaymentMethods(false);
+      }
+    };
+
+    void loadActivePaymentMethods();
+    return () => {
+      active = false;
+    };
+  }, [isPaymentModalOpen]);
 
   const refreshMilestoneUpdates = React.useCallback(async () => {
     if (
@@ -408,20 +524,6 @@ function ProjectDetailsContent() {
         .order('created_at', { ascending: false })
       : { data: [], error: null };
     if (proofsError) throw proofsError;
-
-    const { data: freshDisputes, error: disputesError } = await supabase
-      .from('disputes')
-      .select('*')
-      .eq('project_id', projectId)
-      .order('created_at', { ascending: false });
-    if (disputesError) throw disputesError;
-
-    const { data: freshTransactions, error: transactionsError } = await supabase
-      .from('payment_transactions')
-      .select('*')
-      .eq('project_id', projectId)
-      .order('created_at', { ascending: false });
-    if (transactionsError) throw transactionsError;
 
     const proofsByMilestone = new Map<string, MilestoneProof[]>();
     for (const proof of (freshProofs || []) as MilestoneProof[]) {
@@ -478,8 +580,6 @@ function ProjectDetailsContent() {
       ...milestone,
       proofs: signedProofsByMilestone.get(milestone.id) || [],
     })));
-    setDisputes((freshDisputes || []) as Dispute[]);
-    setProjectTransactions(freshTransactions || []);
   }, [projectId, projectPlan]);
 
   React.useEffect(() => {
@@ -541,7 +641,7 @@ function ProjectDetailsContent() {
           previews[item.contractor_id] = resolvePortfolioImageUrl(firstImage.file_path);
         }
       }
-      setContractorPreviewImages(previous => ({ ...previous, ...previews }));
+      setContractorPreviewImages(previous => ({ ...previews, ...previous }));
     };
 
     void loadPreviews();
@@ -665,6 +765,8 @@ function ProjectDetailsContent() {
     project?.awarded_quote_id
     || ['awarded', 'project_planning', 'in_progress', 'completed'].includes(project?.status ?? '')
   );
+  const acceptedQuotationOnly = activeTab === 'contractors' && isContractAccepted;
+  const quotationToDisplay = acceptedQuotationOnly ? awardedQuote : viewingMaterialQuote;
 
   // Dynamic System Cost Estimation using the official Cost Estimator
   const [systemEstimate, setSystemEstimate] = React.useState<Awaited<ReturnType<typeof calculateEstimate>> | null>(null);
@@ -722,48 +824,151 @@ function ProjectDetailsContent() {
     .reduce((sum, tx) => sum + Number(tx.verified_amount ?? Number(tx.amount_centavos || 0) / 100), 0);
 
   const pendingPaymentTotal = projectTransactions
-    .filter(tx => ['CREATED', 'PENDING', 'PENDING_VERIFICATION', 'PROCESSING'].includes(tx.payment_status))
+    .filter(tx => ['CREATED', 'PENDING', 'PENDING_VERIFICATION', 'UNDER_REVIEW', 'PROCESSING'].includes(tx.payment_status))
     .reduce((sum, tx) => sum + (Number(tx.amount_centavos || 0) / 100), 0);
 
-  const heldMilestones = milestones.filter(m => ['proof_submitted', 'disputed'].includes(m.status));
-  const heldSum = heldMilestones.reduce(
-    (sum, m) => sum + Number(m.homeowner_total_amount ?? m.amount ?? 0),
-    0
-  );
-
-  const escrowBalance = txPaidTotal > 0
-    ? Math.max(0, txPaidTotal - fundsReleasedTotal)
-    : heldSum;
-  const verifiedEscrowBalance = Math.max(0, txPaidTotal - fundsReleasedTotal);
-
+  const escrowBalance = Math.max(0, txPaidTotal - fundsReleasedTotal);
   const confirmedPaidTotal = Math.max(txPaidTotal, fundsReleasedTotal);
   const remainingBalanceToPay = Math.max(0, totalContractAmount - confirmedPaidTotal);
   const availablePaymentBalance = Math.max(0, remainingBalanceToPay - pendingPaymentTotal);
-  const approvalMilestoneAmount = milestoneToApprove
-    ? Number(milestoneToApprove.homeowner_total_amount ?? milestoneToApprove.amount)
-    : 0;
-  const milestonePaymentDue = Math.max(0, approvalMilestoneAmount - verifiedEscrowBalance);
   const defaultPaymentMilestone = milestones.find(milestone => milestone.status === 'in_progress')
     || milestones.find(milestone => milestone.status !== 'paid')
     || null;
 
-  const completedMilestonesCount = paidMilestones.length;
+  const milestoneFunding = React.useMemo(() => {
+    const orderedMilestones = [...milestones].sort((a, b) => a.seq - b.seq);
+    const allocated = new Map(orderedMilestones.map(milestone => [milestone.id, 0]));
+    let unallocatedFunds = 0;
+
+    for (const transaction of projectTransactions) {
+      if (!['PAID', 'SUCCEEDED'].includes(transaction.payment_status)) continue;
+      let remaining = Number(transaction.verified_amount ?? Number(transaction.amount_centavos || 0) / 100);
+      if (remaining <= 0) continue;
+
+      const target = orderedMilestones.find(milestone => milestone.id === transaction.milestone_id);
+      if (target) {
+        const required = Number(target.homeowner_total_amount ?? target.amount);
+        const current = allocated.get(target.id) || 0;
+        const directAllocation = Math.min(remaining, Math.max(0, required - current));
+        allocated.set(target.id, current + directAllocation);
+        remaining -= directAllocation;
+      }
+      unallocatedFunds += remaining;
+    }
+
+    for (const milestone of orderedMilestones) {
+      if (unallocatedFunds <= 0) break;
+      const required = Number(milestone.homeowner_total_amount ?? milestone.amount);
+      const current = allocated.get(milestone.id) || 0;
+      const additionalAllocation = Math.min(unallocatedFunds, Math.max(0, required - current));
+      allocated.set(milestone.id, current + additionalAllocation);
+      unallocatedFunds -= additionalAllocation;
+    }
+
+    return new Map(orderedMilestones.map(milestone => {
+      const required = Number(milestone.homeowner_total_amount ?? milestone.amount);
+      const funded = milestone.status === 'paid'
+        ? Math.max(required, allocated.get(milestone.id) || 0)
+        : allocated.get(milestone.id) || 0;
+      return [milestone.id, {
+        required,
+        allocated: funded,
+        outstanding: Math.max(0, required - funded),
+      }];
+    }));
+  }, [milestones, projectTransactions]);
+  const pendingMilestonePayments = React.useMemo(() => {
+    const pending = new Map<string, number>();
+    for (const transaction of projectTransactions) {
+      if (
+        !transaction.milestone_id ||
+        !['CREATED', 'PENDING', 'PENDING_VERIFICATION', 'UNDER_REVIEW', 'PROCESSING'].includes(transaction.payment_status)
+      ) continue;
+      pending.set(
+        transaction.milestone_id,
+        (pending.get(transaction.milestone_id) || 0) + Number(transaction.amount_centavos || 0) / 100,
+      );
+    }
+    return pending;
+  }, [projectTransactions]);
+  const getMilestonePaymentDue = (milestone: Milestone) => {
+    const outstanding = milestoneFunding.get(milestone.id)?.outstanding ?? 0;
+    const pending = pendingMilestonePayments.get(milestone.id) || 0;
+    return Math.min(Math.max(0, outstanding - pending), availablePaymentBalance);
+  };
+  const paymentFormAmount = payAndApproveMilestoneId && selectedMilestoneForPayment
+    ? getMilestonePaymentDue(selectedMilestoneForPayment).toFixed(2)
+    : proofForm.customPaymentAmount;
+  const availablePaymentMilestones = milestones.filter(
+    milestone => getMilestonePaymentDue(milestone) > 0,
+  );
+  const initialPaymentMilestone = availablePaymentMilestones.find(
+    milestone => milestone.id === defaultPaymentMilestone?.id,
+  ) || availablePaymentMilestones[0] || null;
+
+  const completedMilestonesCount = milestones.filter(milestone =>
+    milestone.status === 'approved' || milestone.status === 'paid'
+  ).length;
   const totalMilestonesCount = milestones.length;
   const completionPercentage = totalMilestonesCount > 0 ? Math.round((completedMilestonesCount / totalMilestonesCount) * 100) : 0;
 
-  const handleOpenMilestonePayment = (milestone: Milestone) => {
-    const milestoneTotal = Number(milestone.homeowner_total_amount ?? milestone.amount);
-    const amountDue = Math.max(0, milestoneTotal - verifiedEscrowBalance);
-    if (amountDue === 0) {
-      showToast('This milestone is already fully funded in escrow.', 'info', 'No Payment Due');
+  const handleOpenProjectPayment = (milestone?: Milestone) => {
+    const targetMilestone = milestone
+      ? availablePaymentMilestones.find(item => item.id === milestone.id) || milestone
+      : initialPaymentMilestone;
+    const suggestedPayment = targetMilestone
+      ? getMilestonePaymentDue(targetMilestone)
+      : availablePaymentBalance;
+    setPaymentAllocationMode('milestone');
+    setSelectedMilestoneForPayment(targetMilestone);
+    setProofForm(prev => ({
+      ...prev,
+      customPaymentAmount: suggestedPayment > 0 ? suggestedPayment.toFixed(2) : '',
+    }));
+    setPayAndApproveMilestoneId(milestone?.id || null);
+    if (milestone) setMilestoneToApprove(null);
+    setIsPaymentModalOpen(true);
+    setPaymentMethodsError('');
+    setErrorMsg('');
+  };
+
+  const handleCloseProjectPayment = () => {
+    setIsPaymentModalOpen(false);
+    if (payAndApproveMilestoneId) {
+      const milestone = milestones.find(item => item.id === payAndApproveMilestoneId);
+      if (milestone) setMilestoneToApprove(milestone);
+    }
+    setPayAndApproveMilestoneId(null);
+  };
+
+  const handlePaymentAllocationModeChange = (mode: 'full' | 'milestone') => {
+    setPaymentAllocationMode(mode);
+    if (mode === 'full') {
+      setSelectedMilestoneForPayment(null);
+      setProofForm(prev => ({
+        ...prev,
+        customPaymentAmount: availablePaymentBalance > 0 ? availablePaymentBalance.toFixed(2) : '',
+      }));
       return;
     }
 
-    setSelectedMilestoneForPayment(milestone);
-    setProofForm(prev => ({ ...prev, customPaymentAmount: String(Math.round(amountDue)) }));
-    setMilestoneToApprove(null);
-    setIsPaymentModalOpen(true);
-    setErrorMsg('');
+    const targetMilestone = selectedMilestoneForPayment || initialPaymentMilestone;
+    setSelectedMilestoneForPayment(targetMilestone);
+    const suggestedPayment = targetMilestone ? getMilestonePaymentDue(targetMilestone) : 0;
+    setProofForm(prev => ({
+      ...prev,
+      customPaymentAmount: suggestedPayment > 0 ? suggestedPayment.toFixed(2) : '',
+    }));
+  };
+
+  const handlePaymentMilestoneChange = (milestoneId: string) => {
+    const targetMilestone = milestones.find(milestone => milestone.id === milestoneId) || null;
+    setSelectedMilestoneForPayment(targetMilestone);
+    const suggestedPayment = targetMilestone ? getMilestonePaymentDue(targetMilestone) : 0;
+    setProofForm(prev => ({
+      ...prev,
+      customPaymentAmount: suggestedPayment > 0 ? suggestedPayment.toFixed(2) : '',
+    }));
   };
 
   // Milestone Approval Flow
@@ -773,56 +978,19 @@ function ProjectDetailsContent() {
     const supabase = createClient();
 
     try {
-      let payoutQueued = false;
-      const currentVerifiedEscrowBalance = Math.max(0, txPaidTotal - fundsReleasedTotal);
-      const milestoneTotal = Number(m.homeowner_total_amount ?? m.amount);
-      if (currentVerifiedEscrowBalance >= milestoneTotal) {
-        const { data: payoutId, error: payoutError } = await supabase.rpc('approve_milestone', {
-          p_milestone_id: m.id,
-        });
-        if (payoutError) {
-          if (!payoutError.message.toLowerCase().includes('insufficient verified project escrow')) {
-            throw payoutError;
-          }
-        } else {
-          if (!payoutId) throw new Error('Milestone approval succeeded without a payout confirmation.');
-          payoutQueued = true;
-        }
+      const { data: approvedMilestoneId, error } = await supabase.rpc('approve_milestone', {
+        p_milestone_id: m.id,
+      });
+      if (error) {
+        const detail = [error.message, error.details, error.hint].filter(Boolean).join(' — ');
+        throw new Error(detail || `Milestone approval failed (${error.code || 'unknown error'}).`);
       }
-
-      if (payoutQueued) {
-        await loadData();
-        setMilestoneToApprove(null);
-        const successMessage = `Milestone "${cleanMilestoneTitle(m.name)}" approved and its escrow payout was queued.`;
-        setSuccessMsg(successMessage);
-        showToast(successMessage, 'success', 'Milestone Approved & Payout Queued');
-        return;
-      }
-
-      const now = new Date().toISOString();
-      const { error: milestoneError } = await supabase
-        .from('milestones')
-        .update({ status: 'approved', approved_at: now })
-        .eq('id', m.id);
-      if (milestoneError) throw milestoneError;
-
-      const nextMilestone = milestones.find(item => item.seq === m.seq + 1);
-      if (nextMilestone) {
-        const { error } = await supabase.from('milestones').update({ status: 'in_progress' }).eq('id', nextMilestone.id);
-        if (error) throw error;
-      }
-
-      // Update state locally
-      setMilestones(prev => prev.map(item => {
-        if (item.id === m.id) return { ...item, status: 'approved', approved_at: now };
-        if (item.seq === m.seq + 1) return { ...item, status: 'in_progress' };
-        return item;
-      }));
-
+      if (!approvedMilestoneId) throw new Error('The milestone approval was not confirmed.');
+      await loadData();
       setMilestoneToApprove(null);
-      const msSuccess = `Milestone "${cleanMilestoneTitle(m.name)}" approved. No escrow payout was made because sufficient verified funds are not available.`;
-      setSuccessMsg(msSuccess);
-      showToast(msSuccess, 'success', 'Milestone Approved');
+      const message = `Milestone "${cleanMilestoneTitle(m.name)}" approved. Funds remain in escrow until an administrator authorizes release.`;
+      setSuccessMsg(message);
+      showToast(message, 'success', 'Milestone Approved');
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : 'Failed to approve milestone';
       setErrorMsg(message);
@@ -923,6 +1091,7 @@ function ProjectDetailsContent() {
       const { error } = await supabase.rpc('phase_one_accept_quote', { p_quote_id: targetQuote.id });
       if (error) throw error;
 
+      setErrorMsg('');
       const totalAmount = agreedPrice;
       setProject(prev => prev ? {
         ...prev,
@@ -936,12 +1105,15 @@ function ProjectDetailsContent() {
       setConfirmQuoteToAccept(null);
       setIsComparisonOpen(false);
 
-      const contractorName = targetQuote.contractor_profile?.business_name || 'the selected contractor';
       const successToast = `Proposal accepted. The agreed project cost is ${formatCurrency(totalAmount)}.`;
       setSuccessMsg(successToast);
       showToast(successToast, 'success', 'Proposal Accepted — Project Planning Phase');
     } catch (err: unknown) {
-      const message = err instanceof Error ? err.message : 'Failed to award contract';
+      const message = err instanceof Error
+        ? err.message
+        : typeof err === 'object' && err !== null && 'message' in err && typeof err.message === 'string'
+          ? err.message
+          : 'Failed to award contract';
       setErrorMsg(message);
       showToast(message, 'error', 'Award Failed');
     } finally {
@@ -1166,7 +1338,7 @@ function ProjectDetailsContent() {
       showToast('No active payment methods are available.', 'error', 'Payment Method Unavailable');
       return;
     }
-    const enteredAmount = parseNumberInput(proofForm.customPaymentAmount);
+    const enteredAmount = parseNumberInput(paymentFormAmount);
     const centavos = Math.round(enteredAmount * 100);
     if (!Number.isFinite(enteredAmount) || enteredAmount <= 0 || !Number.isSafeInteger(centavos)) {
       showToast('Please enter a valid payment amount.', 'error', 'Amount Required');
@@ -1200,10 +1372,41 @@ function ProjectDetailsContent() {
       showToast('Attach payment proof before submitting this method.', 'error', 'Proof Required');
       return;
     }
-
     const autoRef = proofForm.transactionRef.trim() || `PAY-${Date.now().toString().slice(-6)}`;
     const autoSender = proofForm.senderName.trim();
-    const targetMilestone = selectedMilestoneForPayment || defaultPaymentMilestone;
+    const targetMilestone = paymentAllocationMode === 'milestone'
+      ? selectedMilestoneForPayment
+      : null;
+    const milestoneToPayAndApprove = targetMilestone?.id === payAndApproveMilestoneId
+      ? targetMilestone
+      : null;
+    if (paymentAllocationMode === 'milestone' && !targetMilestone) {
+      showToast('Choose a milestone to allocate this payment.', 'error', 'Milestone Required');
+      return;
+    }
+    if (milestoneToPayAndApprove && !proofForm.proofFileUrl) {
+      showToast('Attach payment proof to submit this milestone for approval.', 'error', 'Proof Required');
+      return;
+    }
+    if (targetMilestone) {
+      const milestonePaymentLimit = getMilestonePaymentDue(targetMilestone);
+      if (milestoneToPayAndApprove && Math.abs(enteredAmount - milestonePaymentLimit) > 0.005) {
+        showToast(
+          `Pay the full remaining milestone amount (${formatCurrency(milestonePaymentLimit)}) to submit it for approval.`,
+          'error',
+          'Full Milestone Payment Required'
+        );
+        return;
+      }
+      if (enteredAmount > milestonePaymentLimit) {
+        showToast(
+          `Payment for this milestone cannot exceed its outstanding amount (${formatCurrency(milestonePaymentLimit)}).`,
+          'error',
+          'Amount Exceeds Milestone Balance'
+        );
+        return;
+      }
+    }
 
     setProcessingPayment(true);
     setErrorMsg('');
@@ -1230,6 +1433,7 @@ function ProjectDetailsContent() {
         idempotency_key: `proof-${projectId}-${autoRef}-${Date.now()}`,
         project_id: projectId,
         milestone_id: targetMilestone?.id || null,
+        milestone_approval_requested: Boolean(milestoneToPayAndApprove),
         payer_id: user.id,
         recipient_id: awardedQuote.contractor_id,
         amount_centavos: centavos,
@@ -1256,8 +1460,15 @@ function ProjectDetailsContent() {
 
       if (savedTransaction) setProjectTransactions(prev => [savedTransaction, ...prev]);
 
+      if (milestoneToPayAndApprove) {
+        setMilestones(prev => prev.map(milestone => milestone.id === milestoneToPayAndApprove.id
+          ? { ...milestone, status: 'payment_verification_pending' }
+          : milestone));
+      }
+
       setIsPaymentModalOpen(false);
       setSelectedMilestoneForPayment(null);
+      setPayAndApproveMilestoneId(null);
       setProofForm({
         customPaymentAmount: '',
         senderName: '',
@@ -1269,9 +1480,15 @@ function ProjectDetailsContent() {
         notes: '',
       });
 
-      const notifyMsg = `Payment of ${formatCurrency(enteredAmount)} submitted successfully (Ref: ${autoRef}).`;
-      setSuccessMsg(notifyMsg);
-      showToast(notifyMsg, 'success', 'Payment Submitted');
+      const paymentSubmittedMessage = `Payment of ${formatCurrency(enteredAmount)} submitted for administrator verification (Ref: ${autoRef}).`;
+      if (milestoneToPayAndApprove) {
+        const notifyMsg = `${paymentSubmittedMessage} Milestone "${cleanMilestoneTitle(milestoneToPayAndApprove.name)}" remains unapproved until the administrator verifies the payment.`;
+        setSuccessMsg(notifyMsg);
+        showToast(notifyMsg, 'success', 'Payment Submitted; Approval Pending');
+      } else {
+        setSuccessMsg(paymentSubmittedMessage);
+        showToast(paymentSubmittedMessage, 'success', 'Payment Submitted');
+      }
       setActiveTab('payments');
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : 'Failed to submit proof of payment';
@@ -1339,8 +1556,17 @@ function ProjectDetailsContent() {
     >
       <div className="w-full space-y-6">
         {errorMsg && (
-          <div className="p-4 rounded-xl bg-white border border-red-200 text-red-700 text-xs font-semibold">
-            Project data or requested operation could not be completed: {errorMsg}
+          <div role="alert" className="flex items-start justify-between gap-4 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-xs text-red-800">
+            <div className="flex items-start gap-2">
+              <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" />
+              <span className="font-semibold">{errorMsg}</span>
+            </div>
+            <button type="button" onClick={() => setErrorMsg('')} aria-label="Dismiss error" className="rounded p-1 text-red-700 hover:bg-red-100"><X className="h-3.5 w-3.5" /></button>
+          </div>
+        )}
+        {loadingTabData && (
+          <div role="status" className="rounded-xl border border-blue-100 bg-blue-50 px-4 py-3 text-xs font-medium text-blue-700">
+            Loading {activeTab.replace('_', ' ')} information…
           </div>
         )}
         {activeTab === 'project_plan' && (
@@ -1515,29 +1741,28 @@ function ProjectDetailsContent() {
           <div className="space-y-6">
             {/* Project Planning Notification Banner */}
             {project.status === 'project_planning' && (
-              <div className="p-5 sm:p-6 rounded-2xl bg-gradient-to-r from-indigo-50 via-blue-50 to-emerald-50 border border-indigo-200 shadow-xs flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+              <div className="relative overflow-hidden rounded-2xl border border-blue-100 bg-gradient-to-r from-[#102e55] via-blue-800 to-indigo-700 p-5 text-white shadow-sm sm:flex sm:items-center sm:justify-between sm:gap-5">
+                <div className="pointer-events-none absolute -right-10 -top-20 h-52 w-52 rounded-full border-[28px] border-white/5" />
                 <div className="flex items-start gap-3.5">
-                  <div className="w-12 h-12 rounded-2xl bg-indigo-600 text-white flex items-center justify-center shrink-0 shadow-xs">
-                    <Clock className="w-6 h-6 animate-pulse" />
+                  <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-white/15 text-white ring-1 ring-white/20">
+                    <Clock className="h-5 w-5" />
                   </div>
-                  <div className="space-y-1">
+                  <div className="relative space-y-1">
                     <div className="flex items-center gap-2 flex-wrap">
-                      <h3 className="font-bold text-slate-900 text-base">Project Planning in Progress</h3>
-                      <span className="px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-indigo-100 text-indigo-800 uppercase tracking-wide border border-indigo-200">
-                        Contract Proposal Accepted
-                      </span>
+                      <h3 className="font-bold text-white text-base">Project planning in progress</h3>
+                      <span className="rounded-full bg-white/15 px-2.5 py-1 text-[9px] font-bold uppercase tracking-wider text-blue-50 ring-1 ring-white/20">Proposal accepted</span>
                     </div>
-                    <p className="text-xs text-slate-600 leading-relaxed max-w-2xl">
-                      The accepted contractor quote is <strong className="text-slate-900 font-mono">{formatCurrency(agreedCost)}</strong>. The contractor is preparing the milestone schedule.
+                    <p className="text-xs leading-relaxed text-blue-100">
+                      Agreed proposal: <strong className="font-mono text-white">{formatCurrency(agreedCost)}</strong>. Your contractor is preparing the milestone schedule.
                     </p>
                   </div>
                 </div>
                 <button
                   type="button"
                   onClick={() => setActiveTab('milestones')}
-                  className="px-4 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold shrink-0 shadow-xs transition cursor-pointer"
+                  className="relative mt-4 inline-flex shrink-0 items-center justify-center rounded-xl bg-white px-4 py-2.5 text-xs font-bold text-[#102e55] shadow-sm transition hover:bg-blue-50 sm:mt-0"
                 >
-                  View Milestone Roadmap →
+                  View milestone roadmap <ChevronDown className="ml-1 h-3.5 w-3.5 -rotate-90" />
                 </button>
               </div>
             )}
@@ -1566,7 +1791,7 @@ function ProjectDetailsContent() {
                   {formatCurrency(fundsReleasedTotal)}
                 </div>
                 <div className="text-[11px] text-emerald-700/80 mt-0.5">
-                  {isContractAccepted ? `${completedMilestonesCount} stage(s) approved & paid` : 'No milestone payouts yet'}
+                  {isContractAccepted ? `${paidMilestones.length} of ${totalMilestonesCount} milestone(s) released` : 'No milestone payouts yet'}
                 </div>
               </div>
 
@@ -1645,10 +1870,11 @@ function ProjectDetailsContent() {
                     ) : isContractAccepted ? (
                       <button
                         type="button"
-                        onClick={() => setIsPaymentModalOpen(true)}
-                        className="rounded-xl bg-blue-600 px-3 py-2 text-xs font-bold text-white hover:bg-blue-700"
+                        onClick={() => handleOpenProjectPayment()}
+                        disabled={availablePaymentBalance <= 0}
+                        className="rounded-xl bg-blue-600 px-3 py-2 text-xs font-bold text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50"
                       >
-                        Pay Milestone Escrow
+                        Make Project Payment
                       </button>
                     ) : (
                       <button
@@ -1765,51 +1991,87 @@ function ProjectDetailsContent() {
                 </div>
 
                   {contractor ? (
-                  <div className="grid min-h-0 grid-cols-1 gap-4 text-xs">
-                    <div className="flex min-h-0 flex-col gap-2.5">
-                      <div className="rounded-xl border border-slate-100 bg-slate-50/60 p-3">
-                        <span className="text-slate-400 block text-[11px]">Builder Firm</span>
-                        <strong className="text-slate-900 font-bold text-sm block mt-0.5">{contractor.business_name}</strong>
-                        {contractor.trade_name && <span className="text-[11px] text-slate-500">Trade: {contractor.trade_name}</span>}
+                  <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
+                    <div className="relative h-36 overflow-hidden bg-gradient-to-br from-slate-800 via-blue-900 to-indigo-900 sm:h-44">
+                      {contractorPreviewImages[contractor.profile_id] && (
+                        <img src={contractorPreviewImages[contractor.profile_id]} alt="" className="h-full w-full object-cover opacity-75" />
+                      )}
+                      <div className="absolute inset-0 bg-gradient-to-r from-slate-950/80 via-slate-900/35 to-transparent" />
+                      <div className="absolute left-4 top-4 inline-flex items-center gap-1.5 rounded-full border border-emerald-200/30 bg-emerald-400/15 px-3 py-1.5 text-[10px] font-bold uppercase tracking-wider text-emerald-50 backdrop-blur-sm">
+                        <CheckCircle2 className="h-3.5 w-3.5" /> Awarded contractor
                       </div>
-
-                      <div className="rounded-xl border border-slate-100 bg-slate-50/60 p-3">
-                        <span className="text-slate-400 block text-[11px]">Authorized Representative</span>
-                        <strong className="text-slate-800 font-semibold block mt-0.5">{contractor.authorized_representative || 'Authorized Representative'}</strong>
-                      </div>
-
-                      <div className="space-y-1 rounded-xl border border-blue-100 bg-blue-50/60 p-3">
-                        <div className="flex items-center gap-1.5 text-[11px] font-bold text-blue-900">
-                          <ShieldCheck className="h-3.5 w-3.5 text-blue-600" />
-                          <span>PCAB Accreditation</span>
+                      <div className="absolute bottom-4 left-4 right-4 flex items-end justify-between gap-4 text-white">
+                        <div>
+                          <p className="mb-1 text-[10px] font-semibold uppercase tracking-[0.16em] text-blue-100">Your project partner</p>
+                          <h4 className="text-xl font-bold tracking-tight sm:text-2xl">{contractor.business_name}</h4>
                         </div>
-                        <div className="font-mono text-xs font-bold text-blue-800">{contractor.pcab_license_no || contractor.license_no || 'License not provided'}</div>
-                        <div className="text-[10px] text-blue-700">{contractor.pcab_category || 'Category A — General Building'}</div>
+                        <div className="hidden shrink-0 rounded-xl border border-white/20 bg-white/10 px-4 py-2 text-right backdrop-blur-sm sm:block">
+                          <p className="text-[9px] font-bold uppercase tracking-wider text-blue-100">Agreed proposal</p>
+                          <p className="mt-0.5 font-mono text-lg font-bold">{formatCurrency(agreedCost)}</p>
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="p-4 sm:p-5">
+                      <div className="mb-4 flex items-center gap-3">
+                        <div className="-mt-10 flex h-[68px] w-[68px] shrink-0 items-center justify-center overflow-hidden rounded-2xl border-4 border-white bg-slate-100 shadow-md">
+                          {contractorProfileImages[contractor.profile_id] ? (
+                            <img src={contractorProfileImages[contractor.profile_id]} alt={contractor.business_name} className="h-full w-full object-cover" />
+                          ) : (
+                            <HardHat className="h-7 w-7 text-slate-400" />
+                          )}
+                        </div>
+                        <div className="min-w-0 flex-1">
+                          <p className="truncate text-sm font-bold text-slate-900">{contractor.authorized_representative || 'Authorized representative'}</p>
+                          <p className="text-[11px] text-slate-500">Authorized representative</p>
+                        </div>
+                        <div className="rounded-xl bg-emerald-50 px-3 py-2 text-right sm:hidden">
+                          <p className="text-[9px] font-bold uppercase tracking-wider text-emerald-700">Agreed total</p>
+                          <p className="font-mono text-sm font-bold text-emerald-900">{formatCurrency(agreedCost)}</p>
+                        </div>
                       </div>
 
-                      <div className="space-y-1.5 rounded-xl border border-slate-100 p-3">
-                        <div className="flex items-center gap-2 text-slate-600"><Mail className="h-3.5 w-3.5 shrink-0 text-slate-400" /><span className="truncate">{contractor.business_email || '—'}</span></div>
-                        <div className="flex items-center gap-2 text-slate-600"><Phone className="h-3.5 w-3.5 shrink-0 text-slate-400" /><span>{contractor.business_phone || '—'}</span></div>
-                        <div className="flex items-start gap-2 text-slate-600"><MapPin className="mt-0.5 h-3.5 w-3.5 shrink-0 text-slate-400" /><span className="leading-snug">{contractor.business_address || '—'}</span></div>
+                      <div className="grid gap-3 sm:grid-cols-2">
+                        <div className="rounded-xl border border-blue-100 bg-blue-50/70 p-3">
+                          <div className="mb-1.5 flex items-center gap-2 text-[10px] font-bold uppercase tracking-wider text-blue-900">
+                            <ShieldCheck className="h-4 w-4 text-blue-600" /> PCAB accreditation
+                          </div>
+                          <p className="break-all font-mono text-xs font-bold text-slate-900">{contractor.pcab_license_no || contractor.license_no || 'License not provided'}</p>
+                          <p className="mt-1 text-[10px] text-slate-600">{contractor.pcab_category || 'Category not provided'}</p>
+                        </div>
+                        <div className="space-y-2 rounded-xl border border-slate-200 bg-slate-50/70 p-3 text-[11px]">
+                          <div className="flex min-w-0 items-center gap-2 text-slate-700">
+                            <Mail className="h-3.5 w-3.5 shrink-0 text-slate-400" />
+                            <span className="truncate">{contractor.business_email || 'Email not provided'}</span>
+                          </div>
+                          <div className="flex items-center gap-2 text-slate-700">
+                            <Phone className="h-3.5 w-3.5 shrink-0 text-slate-400" />
+                            <span>{contractor.business_phone || 'Phone not provided'}</span>
+                          </div>
+                          <div className="flex items-start gap-2 text-slate-700">
+                            <MapPin className="mt-0.5 h-3.5 w-3.5 shrink-0 text-slate-400" />
+                            <span className="leading-snug">{contractor.business_address || 'Address not provided'}</span>
+                          </div>
+                        </div>
                       </div>
 
-                      <div className="mt-auto space-y-2 border-t border-slate-100 pt-3">
+                      <div className="mt-4 flex flex-col gap-2 border-t border-slate-100 pt-4 sm:flex-row">
                         {awardedQuote && (
                           <button
                             type="button"
                             onClick={() => void handleOpenQuotation(awardedQuote)}
                             disabled={openingQuotationId === awardedQuote.id}
-                            className="flex w-full items-center justify-center gap-1.5 rounded-xl bg-emerald-700 px-3 py-2 text-xs font-bold text-white transition hover:bg-emerald-800 disabled:cursor-wait disabled:opacity-60"
+                            className="inline-flex flex-1 items-center justify-center gap-2 rounded-xl bg-emerald-700 px-4 py-2.5 text-xs font-bold text-white transition hover:bg-emerald-800 disabled:cursor-wait disabled:opacity-60"
                           >
-                            <Eye className="h-3.5 w-3.5" />
-                            {openingQuotationId === awardedQuote.id ? 'Preparing Quotation…' : 'View Quotation'}
+                            <Eye className="h-4 w-4" />
+                            {openingQuotationId === awardedQuote.id ? 'Preparing quotation…' : 'View accepted quotation'}
                           </button>
                         )}
-                        <button type="button" onClick={() => handleViewContractorPortfolio(contractor)} className="flex w-full items-center justify-center gap-1.5 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-xs font-bold text-slate-700 transition hover:bg-slate-100">
-                          <Eye className="h-3.5 w-3.5 text-slate-500" /> View Contractor Portfolio
+                        <button type="button" onClick={() => handleViewContractorPortfolio(contractor)} className="inline-flex flex-1 items-center justify-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-xs font-bold text-slate-700 transition hover:bg-slate-50">
+                          <Eye className="h-4 w-4 text-slate-500" /> Contractor portfolio
                         </button>
-                        <Link href={`/contractors/${contractor.profile_id}?returnTo=${encodeURIComponent(returnTo)}`} className="block w-full rounded-xl border border-blue-200 bg-blue-50 px-3 py-2 text-center text-xs font-bold text-blue-800 transition hover:bg-blue-100">
-                          View Full Profile, License &amp; Projects
+                        <Link href={`/contractors/${contractor.profile_id}?returnTo=${encodeURIComponent(returnTo)}`} className="inline-flex flex-1 items-center justify-center rounded-xl border border-blue-200 bg-blue-50 px-4 py-2.5 text-center text-xs font-bold text-blue-800 transition hover:bg-blue-100">
+                          Full contractor profile
                         </Link>
                       </div>
                     </div>
@@ -1852,11 +2114,11 @@ function ProjectDetailsContent() {
                               key={q.id}
                               className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm transition hover:-translate-y-0.5 hover:border-emerald-300 hover:shadow-md"
                             >
-                              <div className="relative h-32 overflow-hidden bg-gradient-to-br from-emerald-100 via-slate-100 to-blue-100">
+                              <div className="relative h-36 overflow-hidden bg-gradient-to-br from-slate-200 via-blue-100 to-slate-300">
                                 {contractorPreviewImages[q.contractor_id] ? (
                                   <img
                                     src={contractorPreviewImages[q.contractor_id]}
-                                    alt={`${q.contractor_profile?.business_name || 'Contractor'} portfolio`}
+                                    alt={`${q.contractor_profile?.business_name || 'Contractor'} cover`}
                                     className="h-full w-full object-cover"
                                     loading="lazy"
                                   />
@@ -1865,7 +2127,8 @@ function ProjectDetailsContent() {
                                     <Building2 className="h-12 w-12 text-emerald-800/35" />
                                   </div>
                                 )}
-                                <span className={`absolute left-3 top-3 inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-[10px] font-bold shadow-sm ${
+                                <div className="absolute inset-0 bg-gradient-to-t from-slate-950/45 via-transparent to-slate-950/10" />
+                                <span className={`absolute left-3 top-3 inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-[10px] font-bold shadow-sm backdrop-blur ${
                                   q.contractor_profile?.verification_status === 'approved'
                                     ? 'bg-white/95 text-emerald-800'
                                     : 'bg-white/95 text-amber-800'
@@ -1874,7 +2137,7 @@ function ProjectDetailsContent() {
                                     ? <><ShieldCheck className="h-3.5 w-3.5" /> Verified contractor</>
                                     : <><Clock className="h-3.5 w-3.5" /> Verification pending</>}
                                 </span>
-                                <span className={`absolute right-3 top-3 rounded-full px-2.5 py-1 text-[10px] font-bold uppercase shadow-sm ${
+                                <span className={`absolute right-3 top-3 rounded-full px-3 py-1.5 text-[10px] font-bold uppercase tracking-wide shadow-sm ${
                                   q.status === 'accepted' || q.id === project.awarded_quote_id
                                     ? 'bg-emerald-600 text-white'
                                     : q.status === 'revision_requested'
@@ -1899,78 +2162,60 @@ function ProjectDetailsContent() {
                                 </span>
                               </div>
 
-                              <div className="space-y-3 p-4">
-                                <div className="flex items-start gap-3">
-                                  <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full border border-emerald-100 bg-emerald-50 text-emerald-800">
-                                    <HardHat className="h-5 w-5" />
+                              <div className="space-y-4 p-4 sm:p-5">
+                                <div className="flex items-end gap-3">
+                                  <div className="relative -mt-10 flex h-[76px] w-[76px] shrink-0 items-center justify-center overflow-hidden rounded-full border-4 border-white bg-slate-100 text-emerald-800 shadow-md">
+                                    {contractorProfileImages[q.contractor_id] ? (
+                                      <img src={contractorProfileImages[q.contractor_id]} alt="" className="h-full w-full object-cover" />
+                                    ) : (
+                                      <HardHat className="h-7 w-7" />
+                                    )}
                                   </div>
-                                  <div className="min-w-0 flex-1">
-                                    <h4 className="truncate text-sm font-bold text-slate-900">
+                                  <div className="min-w-0 flex-1 pb-1">
+                                    <h4 className="truncate text-base font-bold tracking-tight text-slate-900">
                                       {q.contractor_profile?.business_name || `Contractor ${q.contractor_id.slice(0, 8)}`}
                                     </h4>
-                                    {q.contractor_profile?.trade_name && (
-                                      <p className="truncate text-[11px] text-slate-500">{q.contractor_profile.trade_name}</p>
-                                    )}
-                                    <div className="mt-1 flex items-center gap-1 text-[11px] text-slate-600">
-                                      <Star className="h-3 w-3 fill-amber-400 text-amber-400" />
-                                      <span className="font-semibold">
-                                        {q.contractor_profile?.rating_avg
-                                          ? Number(q.contractor_profile.rating_avg).toFixed(1)
-                                          : 'New'}
+                                    {q.contractor_profile?.years_experience ? (
+                                      <span className="mt-1 inline-flex rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-semibold text-slate-600">
+                                        {q.contractor_profile.years_experience}+ years experience
                                       </span>
-                                      {q.contractor_profile?.rating_count ? (
-                                        <span>({q.contractor_profile.rating_count} reviews)</span>
-                                      ) : null}
-                                    </div>
+                                    ) : null}
                                   </div>
                                 </div>
 
-                                <div className="flex flex-wrap gap-1.5">
+                                <div className="flex min-h-5 flex-wrap gap-1.5">
                                   {(q.contractor_profile?.specialties || []).slice(0, 3).map(specialty => (
-                                    <span key={specialty} className="rounded-full bg-slate-100 px-2 py-1 text-[10px] font-medium text-slate-600">
+                                    <span key={specialty} className="rounded-md border border-blue-100 bg-blue-50 px-2 py-1 text-[10px] font-semibold text-blue-800">
                                       {removeUnderscore(specialty)}
                                     </span>
                                   ))}
-                                  {q.contractor_profile?.years_experience ? (
-                                    <span className="rounded-full bg-slate-100 px-2 py-1 text-[10px] font-medium text-slate-600">
-                                      {q.contractor_profile.years_experience}+ years
-                                    </span>
-                                  ) : null}
                                 </div>
 
-                                <div className="flex items-center gap-1.5 text-[11px] text-slate-500">
-                                  <MapPin className="h-3.5 w-3.5 shrink-0" />
-                                  <span className="truncate">
-                                    {q.contractor_profile?.province || q.contractor_profile?.service_cities?.join(', ') || 'Service area not listed'}
-                                  </span>
+                                <div className="flex items-center gap-2 text-xs text-slate-500">
+                                  <MapPin className="h-4 w-4 shrink-0 text-blue-700" />
+                                  <span className="truncate">{q.contractor_profile?.province || q.contractor_profile?.service_cities?.join(', ') || 'Service area not listed'}</span>
                                 </div>
 
-                                <div className="rounded-xl border border-emerald-100 bg-emerald-50/60 p-3">
-                                  <div className="text-[10px] font-semibold uppercase tracking-wide text-emerald-700">Quotation price</div>
-                                  <div className="mt-0.5 font-mono text-xl font-extrabold text-emerald-800">
-                                    {formatCurrency(q.price)}
+                                <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">
+                                  <div className="flex items-start justify-between gap-3">
+                                    <div>
+                                      <div className="text-[10px] font-bold uppercase tracking-wider text-slate-500">Proposal total</div>
+                                      <div className="mt-1 font-mono text-2xl font-extrabold tracking-tight text-slate-900">
+                                        {formatCurrency(q.price)}
+                                      </div>
+                                    </div>
+                                    <div className="rounded-lg bg-white p-2 text-blue-700 shadow-sm ring-1 ring-slate-200">
+                                      <FileSpreadsheet className="h-4 w-4" />
+                                    </div>
                                   </div>
-                                  {q.price != null && (
-                                    <div className="mt-2 space-y-1 border-t border-emerald-100 pt-2 text-[10px]">
-                                      <div className="flex justify-between gap-2 text-slate-600">
-                                        <span>Contractor quote</span>
-                                        <strong>{formatCurrency(Number(q.price))}</strong>
-                                      </div>
-                                      <div className="flex justify-between gap-2 text-slate-600">
-                                      </div>
-                                      <div className="flex justify-between gap-2 border-t border-emerald-100 pt-1 font-bold text-emerald-900">
-                                        <span>Total payable if accepted</span>
-                                      </div>
+                                  <div className="mt-3 grid grid-cols-2 gap-3 border-t border-slate-200 pt-3 text-xs">
+                                    <div className="min-w-0">
+                                      <span className="block text-[10px] font-medium uppercase tracking-wide text-slate-400">Duration</span>
+                                      <span className="mt-0.5 block font-semibold text-slate-800">{q.duration_months ? `${q.duration_months} months` : 'Not specified'}</span>
                                     </div>
-                                  )}
-                                  <div className="mt-2 grid grid-cols-2 gap-2 border-t border-emerald-100 pt-2 text-[10px]">
-                                    <div>
-                                      <span className="block text-slate-500">Duration</span>
-                                      <span className="font-semibold text-slate-800">{q.duration_months ? `${q.duration_months} months` : 'Not specified'}</span>
-                                    </div>
-                                    <div>
-                                      <span className="block text-slate-500">License</span>
-                                      <span className="truncate font-semibold text-slate-800">
+                                    <div className="min-w-0">
+                                      <span className="block text-[10px] font-medium uppercase tracking-wide text-slate-400">License</span>
+                                      <span className="mt-0.5 block truncate font-semibold text-slate-800">
                                         {q.contractor_profile?.pcab_license_no || q.contractor_profile?.license_no || 'Not provided'}
                                       </span>
                                     </div>
@@ -1983,29 +2228,29 @@ function ProjectDetailsContent() {
                                   </p>
                                 )}
 
-                                <div className="flex flex-col gap-2 border-t border-slate-100 pt-3">
+                                <div className="grid gap-2 border-t border-slate-100 pt-3">
                                   <button
                                     type="button"
                                     disabled={openingQuotationId === q.id}
                                     onClick={() => void handleOpenQuotation(q)}
-                                    className="inline-flex items-center justify-center gap-1.5 rounded-xl bg-emerald-700 px-3 py-2 text-xs font-bold text-white transition hover:bg-emerald-800"
+                                    className="inline-flex items-center justify-center gap-2 rounded-lg bg-[#102e55] px-3 py-2.5 text-xs font-bold text-white transition hover:bg-blue-900 disabled:cursor-wait disabled:opacity-60"
                                   >
                                     <FileSpreadsheet className="h-3.5 w-3.5" />
                                     {openingQuotationId === q.id ? 'Preparing Quotation…' : 'View Quotation PDF'}
                                   </button>
                                   <Link
                                     href={`/contractors/${q.contractor_id}?returnTo=${encodeURIComponent(returnTo)}`}
-                                    className="inline-flex items-center justify-center gap-1.5 rounded-xl border border-emerald-700 bg-white px-3 py-2 text-xs font-bold text-emerald-800 transition hover:bg-emerald-50"
+                                    className="inline-flex items-center justify-center gap-2 rounded-lg border border-slate-200 bg-white px-3 py-2.5 text-xs font-bold text-slate-700 transition hover:border-blue-200 hover:bg-blue-50 hover:text-blue-800"
                                   >
                                     <Eye className="h-3.5 w-3.5" />
                                     View Profile
                                   </Link>
                                   {!isContractAccepted && !['declined', 'rejected', 'expired'].includes(q.status) && (
-                                    <div className="flex gap-2">
+                                    <div className="grid grid-cols-2 gap-2">
                                       <button
                                         type="button"
                                         onClick={() => setRevisionModalQuote(q)}
-                                        className="flex-1 rounded-xl border border-amber-200 bg-amber-50 px-2 py-2 text-[11px] font-semibold text-amber-800 transition hover:bg-amber-100"
+                                        className="flex-1 rounded-lg border border-amber-200 bg-amber-50 px-2 py-2.5 text-[11px] font-bold text-amber-800 transition hover:bg-amber-100"
                                       >
                                         Request Revision
                                       </button>
@@ -2013,7 +2258,7 @@ function ProjectDetailsContent() {
                                         type="button"
                                         disabled={acceptingQuoteId === q.id}
                                         onClick={() => handleAcceptContractorQuote(q)}
-                                        className="flex-1 rounded-xl bg-emerald-700 px-2 py-2 text-[11px] font-bold text-white transition hover:bg-emerald-800 disabled:opacity-50"
+                                        className="flex-1 rounded-lg bg-emerald-700 px-2 py-2.5 text-[11px] font-bold text-white transition hover:bg-emerald-800 disabled:opacity-50"
                                       >
                                         {acceptingQuoteId === q.id ? 'Accepting…' : 'Accept Proposal'}
                                       </button>
@@ -2278,7 +2523,9 @@ function ProjectDetailsContent() {
                 <div className="space-y-3.5">
                   {milestones.map((m) => {
                     const isPaid = m.status === 'paid';
+                    const isApproved = m.status === 'approved';
                     const isProofSubmitted = m.status === 'proof_submitted';
+                    const isPaymentVerificationPending = m.status === 'payment_verification_pending';
                     const isInProgress = m.status === 'in_progress';
                     const isDisputed = m.status === 'disputed';
                     const isLocked = m.status === 'locked';
@@ -2299,7 +2546,9 @@ function ProjectDetailsContent() {
                     const contractorNote = m.contractor_update?.trim() || latestProofNote;
 
                     // Determine if this dropdown is open: active/in-progress/disputed default open, locked default closed
-                    const defaultOpen = !isLocked && (m.seq === 1 || isInProgress || isProofSubmitted || isDisputed);
+                    const defaultOpen = !isLocked && (
+                      m.seq === 1 || isInProgress || isProofSubmitted || isPaymentVerificationPending || isDisputed
+                    );
                     const isExpanded = expandedStages[m.id] !== undefined ? expandedStages[m.id] : defaultOpen;
 
                     return (
@@ -2307,7 +2556,9 @@ function ProjectDetailsContent() {
                         key={m.id}
                         className={`rounded-2xl border transition-all overflow-hidden ${isPaid
                           ? 'bg-white border-emerald-200 shadow-2xs'
-                          : isProofSubmitted
+                          : isApproved
+                            ? 'bg-white border-emerald-200 shadow-xs ring-1 ring-emerald-50'
+                            : isProofSubmitted || isPaymentVerificationPending
                             ? 'bg-white border-indigo-200 shadow-xs ring-1 ring-indigo-50'
                             : isDisputed
                               ? 'bg-white border-amber-300 shadow-xs ring-1 ring-amber-50'
@@ -2323,8 +2574,8 @@ function ProjectDetailsContent() {
                           className="w-full p-4 sm:p-5 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 text-left hover:bg-slate-50/80 transition cursor-pointer select-none"
                         >
                           <div className="flex items-center gap-3.5 flex-wrap">
-                            <span className={`w-8 h-8 rounded-full text-xs font-bold flex items-center justify-center shrink-0 ${isPaid ? 'bg-emerald-100 text-emerald-800' :
-                              isProofSubmitted ? 'bg-indigo-100 text-indigo-800' :
+                            <span className={`w-8 h-8 rounded-full text-xs font-bold flex items-center justify-center shrink-0 ${isPaid || isApproved ? 'bg-emerald-100 text-emerald-800' :
+                              isProofSubmitted || isPaymentVerificationPending ? 'bg-indigo-100 text-indigo-800' :
                                 isDisputed ? 'bg-amber-100 text-amber-800' :
                                   isInProgress ? 'bg-blue-100 text-blue-800' :
                                     'bg-slate-200 text-slate-500'
@@ -2342,7 +2593,10 @@ function ProjectDetailsContent() {
                               </div>
                               <p className="text-[11px] text-slate-400 mt-0.5">
                                 {isPaid ? 'Stage approved & funds released' :
-                                  isProofSubmitted ? loadingProofMilestones[m.id]
+                                  isApproved ? 'Work approved; awaiting administrator escrow release' :
+                                  isPaymentVerificationPending
+                                    ? 'Payment submitted; awaiting administrator verification'
+                                  : isProofSubmitted ? loadingProofMilestones[m.id]
                                     ? 'Loading inspection photos…'
                                     : `${proofs.length} inspection photo(s) submitted for your review` :
                                     isDisputed ? 'Milestone contested in dispute resolution' :
@@ -2362,15 +2616,20 @@ function ProjectDetailsContent() {
                             )}
 
                             <span className={`px-2.5 py-1 rounded-full text-[10px] font-extrabold uppercase tracking-wider ${isPaid ? 'bg-emerald-100 text-emerald-800 border border-emerald-200' :
-                              isProofSubmitted ? 'bg-indigo-100 text-indigo-800 border border-indigo-200' :
+                              isApproved ? 'bg-emerald-50 text-emerald-800 border border-emerald-200' :
+                              isProofSubmitted || isPaymentVerificationPending ? 'bg-indigo-100 text-indigo-800 border border-indigo-200' :
                                 isDisputed ? 'bg-amber-100 text-amber-800 border border-amber-300' :
                                   isInProgress ? 'bg-blue-100 text-blue-800 border border-blue-200' :
                                     'bg-slate-100 text-slate-500 border border-slate-200'
                               }`}>
                               {isPaid
-                                ? 'Approved'
+                                ? 'Released'
+                                : isApproved
+                                  ? 'Approved'
                                 : isProofSubmitted
                                   ? 'Proof Awaiting Review'
+                                  : isPaymentVerificationPending
+                                    ? 'Pending Admin Payment Verification'
                                   : isLocked
                                     ? 'Locked'
                                     : removeUnderscore(m.status)}
@@ -2490,7 +2749,7 @@ function ProjectDetailsContent() {
                                   onClick={() => activeDispute && void handleResolveDispute(activeDispute)}
                                   title={!activeDispute || visibleProofs.length === 0
                                     ? 'The contractor must submit replacement photos first.'
-                                    : 'Approve the contractor fix and release this milestone.'}
+                                    : 'Approve the contractor fix; escrow release remains subject to admin authorization.'}
                                   className="px-4 py-2 rounded-xl bg-[#136F48] hover:bg-[#0f5738] text-white text-xs font-bold transition flex items-center gap-1.5 shadow-xs disabled:bg-slate-300 disabled:text-slate-600 disabled:cursor-not-allowed"
                                 >
                                   <CheckCircle2 className="w-3.5 h-3.5" />
@@ -2523,7 +2782,7 @@ function ProjectDetailsContent() {
                                     className="px-4 py-2 rounded-xl bg-[#136F48] hover:bg-[#0f5738] text-white text-xs font-bold transition flex items-center gap-1.5 shadow-xs"
                                   >
                                     <CheckCircle2 className="w-3.5 h-3.5" />
-                                    <span>Approve and Pay</span>
+                                    <span>Review &amp; Approve</span>
                                   </button>
                                     </>
                                   )}
@@ -2549,33 +2808,90 @@ function ProjectDetailsContent() {
         {activeTab === 'payments' && (
           <div className="space-y-6">
             {/* Payment Summary Bar */}
-            <div className="p-5 rounded-2xl bg-white border border-slate-200 shadow-xs flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
-              <div>
-                <h3 className="font-bold text-slate-900 text-base">Escrow Payment History & Audit Logs</h3>
-                <p className="text-xs text-slate-500">
-                  Traceable bank transfer and e-wallet deposit slips verified by administration.
-                </p>
+
+            <section className="space-y-4 rounded-2xl border border-slate-200 bg-white p-5 shadow-xs">
+              <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                <div>
+                  <h3 className="text-sm font-bold text-slate-900">Project Payment Summary</h3>
+                  <p className="mt-1 text-[11px] text-slate-500">Verified payments are allocated against the accepted milestone schedule.</p>
+                </div>
+                {isContractAccepted && availablePaymentBalance > 0 && (
+                  <button
+                    type="button"
+                    onClick={() => handleOpenProjectPayment()}
+                    className="inline-flex w-fit items-center gap-2 rounded-xl bg-blue-600 px-4 py-2.5 text-xs font-bold text-white shadow-xs transition hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2"
+                  >
+                    <CreditCard className="h-4 w-4" />
+                    Make a payment
+                  </button>
+                )}
+              </div>
+              <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+                <div className="rounded-xl border border-slate-200 bg-slate-50 p-3">
+                  <p className="text-[10px] font-bold uppercase tracking-wide text-slate-500">Agreed project cost</p>
+                  <p className="mt-1 font-mono text-lg font-bold text-slate-900">{formatCurrency(totalContractAmount)}</p>
+                </div>
+                <div className="rounded-xl border border-emerald-100 bg-emerald-50/60 p-3">
+                  <p className="text-[10px] font-bold uppercase tracking-wide text-emerald-700">Total paid</p>
+                  <p className="mt-1 font-mono text-lg font-bold text-emerald-800">{formatCurrency(confirmedPaidTotal)}</p>
+                </div>
+                <div className="rounded-xl border border-amber-100 bg-amber-50/60 p-3">
+                  <p className="text-[10px] font-bold uppercase tracking-wide text-amber-700">Remaining balance</p>
+                  <p className="mt-1 font-mono text-lg font-bold text-amber-900">{formatCurrency(remainingBalanceToPay)}</p>
+                </div>
+                <div className="rounded-xl border border-blue-100 bg-blue-50/60 p-3">
+                  <p className="text-[10px] font-bold uppercase tracking-wide text-blue-700">Payment status</p>
+                  <p className="mt-1 text-sm font-bold text-blue-900">
+                    {remainingBalanceToPay === 0
+                      ? 'Fully funded'
+                      : pendingPaymentTotal > 0
+                        ? 'Payment under verification'
+                        : confirmedPaidTotal > 0
+                          ? 'Partially funded'
+                          : 'Payment not started'}
+                  </p>
+                  {pendingPaymentTotal > 0 && (
+                    <p className="mt-1 text-[10px] text-blue-700">{formatCurrency(pendingPaymentTotal)} pending verification</p>
+                  )}
+                </div>
               </div>
 
-              <div className="flex items-center gap-2.5">
-                <button
-                  type="button"
-                  onClick={() => setIsPaymentModalOpen(true)}
-                  className="px-4 py-2 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs shadow-xs transition flex items-center gap-1.5"
-                >
-                  <CreditCard className="w-3.5 h-3.5" />
-                  <span>Pay Milestone Escrow</span>
-                </button>
+              <div className="overflow-x-auto rounded-xl border border-slate-200">
+                <table className="w-full min-w-[640px] text-left text-xs">
+                  <thead className="bg-slate-50 text-[10px] uppercase tracking-wide text-slate-500">
+                    <tr>
+                      <th className="px-3 py-2.5 font-bold">Milestone</th>
+                      <th className="px-3 py-2.5 text-right font-bold">Required amount</th>
+                      <th className="px-3 py-2.5 text-right font-bold">Allocated payment</th>
+                      <th className="px-3 py-2.5 text-right font-bold">Outstanding</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100">
+                    {milestones.map(milestone => {
+                      const allocation = milestoneFunding.get(milestone.id);
+                      return (
+                        <tr key={milestone.id}>
+                          <td className="px-3 py-3 font-semibold text-slate-800">{milestone.seq}. {cleanMilestoneTitle(milestone.name)}</td>
+                          <td className="px-3 py-3 text-right font-mono text-slate-700">{formatCurrency(allocation?.required ?? milestone.amount)}</td>
+                          <td className="px-3 py-3 text-right font-mono text-emerald-700">{formatCurrency(allocation?.allocated ?? 0)}</td>
+                          <td className="px-3 py-3 text-right font-mono font-bold text-amber-800">{formatCurrency(allocation?.outstanding ?? milestone.amount)}</td>
+                        </tr>
+                      );
+                    })}
+                    {milestones.length === 0 && (
+                      <tr><td colSpan={4} className="px-3 py-6 text-center text-slate-500">Milestone payment allocations will appear after the contractor submits a project plan.</td></tr>
+                    )}
+                  </tbody>
+                </table>
               </div>
-            </div>
+            </section>
 
             {/* Transactions Table */}
             <div className="bg-white rounded-2xl border border-slate-200 shadow-xs overflow-hidden">
               <div className="overflow-x-auto">
-                  <table className="w-full text-left text-xs">
+                  <table className="w-full min-w-[640px] text-left text-xs">
                     <thead className="bg-slate-50/80 border-b border-slate-200 text-[11px] font-bold text-slate-600 uppercase tracking-wider">
                       <tr>
-                        <th className="py-3 px-4">Transaction Ref</th>
                         <th className="py-3 px-4">Payment Date</th>
                         <th className="py-3 px-4">Amount (₱)</th>
                         <th className="py-3 px-4">Payment Method</th>
@@ -2585,20 +2901,26 @@ function ProjectDetailsContent() {
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-100 text-slate-700">
-                      {projectTransactions.length === 0 ? (
+                      {loadingTabData && activeTab === 'payments' ? (
                         <tr>
-                          <td colSpan={7} className="px-4 py-10 text-center">
+                          <td colSpan={6} className="px-4 py-10 text-center text-xs text-slate-500">
+                            Loading payment records…
+                          </td>
+                        </tr>
+                      ) : projectTransactions.length === 0 ? (
+                        <tr>
+                          <td colSpan={6} className="px-4 py-10 text-center">
                             <CreditCard className="w-8 h-8 text-slate-300 mx-auto" />
                             <p className="mt-3 font-semibold text-slate-700">No payment transaction records submitted yet.</p>
                             <p className="mx-auto mt-1 max-w-sm text-slate-400">
-                              When you make an external bank or e-wallet transfer, click &quot;Pay Milestone Escrow&quot; to upload your deposit slip.
+                              When you make an external bank or e-wallet transfer, click &quot;Make Project Payment&quot; to upload your deposit slip.
                             </p>
                             <button
                               type="button"
-                              onClick={() => setIsPaymentModalOpen(true)}
+                              onClick={() => handleOpenProjectPayment()}
                               className="mt-4 px-4 py-2 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs transition"
                             >
-                              Pay First Milestone Escrow
+                              Make First Project Payment
                             </button>
                           </td>
                         </tr>
@@ -2610,27 +2932,17 @@ function ProjectDetailsContent() {
 
                         return (
                           <tr key={tx.id || tx.transaction_ref} className="hover:bg-slate-50/70">
-                            {/* 1. Transaction Ref */}
-                            <td className="py-3.5 px-4 font-mono font-bold text-slate-900">
-                              <div>{tx.transaction_ref}</div>
-                              {tx.provider_tx_ref && (
-                                <div className="text-[10px] text-slate-400 font-normal">
-                                  Trace Ref: {tx.provider_tx_ref}
-                                </div>
-                              )}
-                            </td>
-
-                            {/* 2. Payment Date */}
+                            {/* 1. Payment Date */}
                             <td className="py-3.5 px-4 text-slate-600">
                               {formatDate(tx.created_at)}
                             </td>
 
-                            {/* 3. Amount */}
+                            {/* 2. Amount */}
                             <td className="py-3.5 px-4 font-mono font-bold text-slate-900">
                               {formatCurrency(amount)}
                             </td>
 
-                            {/* 4. Payment Method */}
+                            {/* 3. Payment Method */}
                             <td className="py-3.5 px-4">
                               <span className="font-semibold text-slate-800 block">
                                 {tx.provider || tx.payment_method}
@@ -2640,7 +2952,7 @@ function ProjectDetailsContent() {
                               </span>
                             </td>
 
-                            {/* 5. Proof of Payment (Clickable View Slip modal) */}
+                            {/* 4. Proof of Payment (Clickable View Slip modal) */}
                             <td className="py-3.5 px-4">
                               <button
                                 type="button"
@@ -2652,7 +2964,7 @@ function ProjectDetailsContent() {
                               </button>
                             </td>
 
-                            {/* 6. Verification Status */}
+                            {/* 5. Verification Status */}
                             <td className="py-3.5 px-4">
                               {isSucceeded && (
                                 <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-emerald-100 text-emerald-800 border border-emerald-200">
@@ -2679,7 +2991,7 @@ function ProjectDetailsContent() {
                               )}
                             </td>
 
-                            {/* 7. Fund-Release Record */}
+                            {/* 6. Fund-Release Record */}
                             <td className="py-3.5 px-4 text-xs">
                               {isSucceeded ? (
                                 <span className="font-semibold text-emerald-700 flex items-center gap-1">
@@ -2763,7 +3075,7 @@ function ProjectDetailsContent() {
                           onClick={() => void handleResolveDispute(d)}
                           className="mt-3 rounded-lg bg-emerald-600 px-3 py-2 text-xs font-bold text-white hover:bg-emerald-700"
                         >
-                          {approvingMilestoneId === d.milestone_id ? 'Approving...' : 'Approve Fix & Release'}
+                          {approvingMilestoneId === d.milestone_id ? 'Approving...' : 'Approve Fix'}
                         </button>
                       )}
                     </article>
@@ -2775,32 +3087,35 @@ function ProjectDetailsContent() {
         )}
 
         {/* ==================================================================== */}
-        {/* MODAL 1: PAY MILESTONE ESCROW                                       */}
+        {/* MODAL 1: PROJECT ESCROW PAYMENT                                    */}
         {/* ==================================================================== */}
         {isPaymentModalOpen && (
           <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 p-4 backdrop-blur-xs">
-            <div className="bg-white rounded-2xl max-w-lg w-full shadow-2xl border border-slate-200 overflow-hidden animate-in fade-in zoom-in-95 duration-200 max-h-[92vh] flex flex-col">
+            <div className="bg-white rounded-2xl w-full max-w-6xl shadow-2xl border border-slate-200 overflow-hidden animate-in fade-in zoom-in-95 duration-200 max-h-[92vh] flex flex-col">
               <div className="px-6 py-4 border-b border-slate-200 flex items-center justify-between bg-slate-50/70 shrink-0">
                 <div>
                   <div className="flex items-center gap-1.5 text-blue-600 font-bold text-[10px] uppercase tracking-wider">
                     <ShieldCheck className="w-3.5 h-3.5" />
                     <span>Official Escrow Safekeeping Transfer</span>
                   </div>
-                  <h3 className="font-bold text-slate-900 text-base">Pay Milestone Escrow</h3>
+                  <h3 className="font-bold text-slate-900 text-base">
+                    {payAndApproveMilestoneId ? 'Pay & Approve Milestone' : 'Make Project Payment'}
+                  </h3>
                   <p className="text-xs text-slate-500 truncate">{project.title}</p>
                 </div>
                 <button
                   type="button"
-                  onClick={() => setIsPaymentModalOpen(false)}
+                  onClick={handleCloseProjectPayment}
                   className="p-1.5 rounded-lg text-slate-400 hover:text-slate-700 hover:bg-slate-200/60 transition-colors"
                 >
                   <X className="w-4 h-4" />
                 </button>
               </div>
 
-              <div className="p-6 space-y-4 text-xs overflow-y-auto flex-1">
+              <div className="p-5 space-y-4 text-xs overflow-y-auto flex-1">
+                <div className="grid gap-4 lg:grid-cols-2">
                 {/* Balance strip */}
-                <div className="grid grid-cols-3 gap-2 p-3 rounded-xl bg-slate-50 border border-slate-200 text-center">
+                <div className="lg:col-span-2 grid grid-cols-3 gap-2 p-3 rounded-xl bg-slate-50 border border-slate-200 text-center">
                   <div>
                     <span className="text-[10px] font-semibold text-slate-400 uppercase block">
                       {isContractAccepted ? 'Agreed Cost' : 'Estimated Project Cost'}
@@ -2808,34 +3123,96 @@ function ProjectDetailsContent() {
                     <span className="text-xs font-bold font-mono text-slate-900">{formatCurrency(displayCostAmount)}</span>
                   </div>
                   <div className="border-x border-slate-200">
-                    <span className="text-[10px] font-semibold text-emerald-600 uppercase block">Released</span>
-                    <span className="text-xs font-bold font-mono text-emerald-600">{formatCurrency(fundsReleasedTotal)}</span>
+                    <span className="text-[10px] font-semibold text-emerald-600 uppercase block">Total Paid</span>
+                    <span className="text-xs font-bold font-mono text-emerald-600">{formatCurrency(confirmedPaidTotal)}</span>
                   </div>
                   <div>
                     <span className="text-[10px] font-semibold text-blue-600 uppercase block">
-                      {isContractAccepted ? 'Available to Pay' : 'Estimated Project Cost'}
+                      {isContractAccepted ? 'Remaining Balance' : 'Estimated Project Cost'}
                     </span>
                     <span className="text-xs font-bold font-mono text-blue-600">
-                      {formatCurrency(isContractAccepted ? availablePaymentBalance : displayCostAmount)}
+                      {formatCurrency(isContractAccepted ? remainingBalanceToPay : displayCostAmount)}
                     </span>
                   </div>
                 </div>
 
-                {/* Milestone Target Context */}
-                <div className="p-2.5 rounded-xl bg-slate-100/80 border border-slate-200 flex items-center justify-between text-xs">
-                  <span className="text-slate-500 font-medium">Paying Towards:</span>
-                  <span className="font-bold text-slate-800">
-                    {selectedMilestoneForPayment
-                      ? `Stage ${selectedMilestoneForPayment.seq}: ${cleanMilestoneTitle(selectedMilestoneForPayment.name)}`
-                      : (defaultPaymentMilestone
-                        ? `Stage ${defaultPaymentMilestone.seq}: ${cleanMilestoneTitle(defaultPaymentMilestone.name)}`
-                        : 'Platform Neutral Escrow Vault')}
-                  </span>
-                </div>
+                {payAndApproveMilestoneId ? (
+                  <div className="lg:col-span-2 rounded-xl border border-blue-200 bg-blue-50 px-4 py-3 text-xs">
+                    <p className="font-bold text-blue-950">
+                      Milestone {selectedMilestoneForPayment?.seq}: {selectedMilestoneForPayment ? cleanMilestoneTitle(selectedMilestoneForPayment.name) : 'Payment'}
+                    </p>
+                    <p className="mt-1 text-blue-800">
+                      Exact amount due: {formatCurrency(parseNumberInput(paymentFormAmount))}. The milestone remains unapproved until an administrator verifies this payment.
+                    </p>
+                  </div>
+                ) : (
+                <fieldset className="lg:col-span-2 space-y-2">
+                  <legend className="text-xs font-bold text-slate-800">How would you like to pay?</legend>
+                  <div className="grid grid-cols-2 gap-2">
+                    <button
+                      type="button"
+                      aria-pressed={paymentAllocationMode === 'full'}
+                      onClick={() => handlePaymentAllocationModeChange('full')}
+                      className={`rounded-xl border p-3 text-left transition ${
+                        paymentAllocationMode === 'full'
+                          ? 'border-blue-600 bg-blue-50 text-blue-900 ring-1 ring-blue-500'
+                          : 'border-slate-200 bg-white text-slate-700 hover:bg-slate-50'
+                      }`}
+                    >
+                      <span className="block text-xs font-bold">Pay in full</span>
+                      <span className="mt-1 block text-[10px] text-slate-500">Pay the remaining project balance</span>
+                    </button>
+                    <button
+                      type="button"
+                      aria-pressed={paymentAllocationMode === 'milestone'}
+                      disabled={availablePaymentMilestones.length === 0}
+                      onClick={() => handlePaymentAllocationModeChange('milestone')}
+                      className={`rounded-xl border p-3 text-left transition disabled:cursor-not-allowed disabled:opacity-50 ${
+                        paymentAllocationMode === 'milestone'
+                          ? 'border-blue-600 bg-blue-50 text-blue-900 ring-1 ring-blue-500'
+                          : 'border-slate-200 bg-white text-slate-700 hover:bg-slate-50'
+                      }`}
+                    >
+                      <span className="block text-xs font-bold">Pay in milestone</span>
+                      <span className="mt-1 block text-[10px] text-slate-500">Choose a milestone to fund</span>
+                    </button>
+                  </div>
+                  {paymentAllocationMode === 'milestone' ? (
+                    <label className="block space-y-1.5">
+                      <span className="text-[11px] font-semibold text-slate-600">Select milestone</span>
+                      <select
+                        value={selectedMilestoneForPayment?.id || ''}
+                        onChange={event => handlePaymentMilestoneChange(event.target.value)}
+                        disabled={availablePaymentMilestones.length === 0}
+                        className="w-full rounded-xl border border-slate-300 bg-white px-3 py-2.5 text-xs text-slate-800 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:bg-slate-100"
+                      >
+                        <option value="" disabled>Select a milestone</option>
+                        {availablePaymentMilestones.map(milestone => (
+                          <option key={milestone.id} value={milestone.id}>
+                            Stage {milestone.seq}: {cleanMilestoneTitle(milestone.name)} — outstanding {formatCurrency(milestoneFunding.get(milestone.id)?.outstanding || 0)}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+                  ) : (
+                    <p className="text-[10px] text-slate-500">
+                      This payment will be allocated across the project milestones. Any payment already awaiting verification is excluded from the amount due now.
+                    </p>
+                  )}
+                </fieldset>
+                )}
+                <p className="lg:col-span-2 text-[11px] leading-relaxed text-slate-500">
+                  {payAndApproveMilestoneId
+                    ? 'Your payment remains pending until an administrator verifies it. Funds stay in escrow and cannot be released before verification.'
+                    : 'Payments are recorded as project funds and remain in escrow. Payment collection is separate from milestone review and approval.'}
+                </p>
 
+                <div className="space-y-4">
                 {/* Amount Input */}
                 <div className="space-y-1.5">
-                  <label className="text-xs font-bold text-slate-800">Payment Amount (₱) *</label>
+                  <label className="text-xs font-bold text-slate-800">
+                    {payAndApproveMilestoneId ? 'Exact Milestone Payment (₱) *' : 'Payment Amount (₱) *'}
+                  </label>
                   <div className="relative">
                     <span className="absolute left-3.5 top-1/2 -translate-y-1/2 text-sm font-bold text-slate-400 font-mono">₱</span>
                     <input
@@ -2843,7 +3220,8 @@ function ProjectDetailsContent() {
                       inputMode="decimal"
                       required
                       placeholder="Enter amount to pay"
-                      value={formatNumberInput(proofForm.customPaymentAmount)}
+                      readOnly={paymentAllocationMode === 'full' || Boolean(payAndApproveMilestoneId)}
+                      value={formatNumberInput(paymentFormAmount)}
                       onChange={(e) => setProofForm({ ...proofForm, customPaymentAmount: formatNumberInput(e.target.value) })}
                       className="w-full pl-8 pr-4 py-2.5 bg-white border border-slate-300 rounded-xl text-sm font-bold font-mono text-slate-900 focus:ring-2 focus:ring-blue-500 focus:outline-none"
                     />
@@ -2858,21 +3236,35 @@ function ProjectDetailsContent() {
                 {/* Payment Category Pills */}
                 <div className="space-y-1.5">
                   <label className="text-xs font-bold text-slate-800">Select Payment Method</label>
-                  <div className="grid grid-cols-2 gap-2">
-                    {configuredMethods.map(method => (
-                      <button
-                        key={method.id}
-                        type="button"
-                        onClick={() => setSelectedMethodId(method.id)}
-                        className={`p-2.5 rounded-xl border text-left transition font-semibold ${selectedMethodId === method.id
-                          ? 'bg-blue-50 border-blue-600 text-blue-900 ring-1 ring-blue-500 shadow-2xs'
-                          : 'bg-white border-slate-200 text-slate-700 hover:bg-slate-50'
-                          }`}
-                      >
-                        {method.display_name}
-                      </button>
-                    ))}
-                  </div>
+                  {loadingPaymentMethods ? (
+                    <div role="status" className="rounded-xl border border-slate-200 bg-slate-50 px-3.5 py-3 text-xs text-slate-500">
+                      Loading active payment methods…
+                    </div>
+                  ) : paymentMethodsError ? (
+                    <div role="alert" className="rounded-xl border border-red-200 bg-red-50 px-3.5 py-3 text-xs text-red-700">
+                      Payment methods could not be loaded: {paymentMethodsError}
+                    </div>
+                  ) : configuredMethods.length === 0 ? (
+                    <div className="rounded-xl border border-amber-200 bg-amber-50 px-3.5 py-3 text-xs text-amber-800">
+                      No active payment methods are currently registered. Please contact the administrator before making a payment.
+                    </div>
+                  ) : (
+                    <div className="grid grid-cols-2 gap-2">
+                      {configuredMethods.map(method => (
+                        <button
+                          key={method.id}
+                          type="button"
+                          onClick={() => setSelectedMethodId(method.id)}
+                          className={`p-2.5 rounded-xl border text-left transition font-semibold ${selectedMethodId === method.id
+                            ? 'bg-blue-50 border-blue-600 text-blue-900 ring-1 ring-blue-500 shadow-2xs'
+                            : 'bg-white border-slate-200 text-slate-700 hover:bg-slate-50'
+                            }`}
+                        >
+                          {method.display_name}
+                        </button>
+                      ))}
+                    </div>
+                  )}
                 </div>
 
                 {/* Official Escrow Deposit Account Details Card */}
@@ -2953,7 +3345,9 @@ function ProjectDetailsContent() {
                     </div>
                   );
                 })()}
+                </div>
 
+                <div className="space-y-4">
                 {/* Sender Name & Ref */}
                 <div className="grid grid-cols-2 gap-3">
                   <div className="space-y-1">
@@ -3009,7 +3403,7 @@ function ProjectDetailsContent() {
                     <div className="p-3 rounded-xl border border-emerald-300 bg-emerald-50/60 flex items-center justify-between gap-3 animate-in fade-in duration-150">
                       <div className="flex items-center gap-3 min-w-0">
                         <div
-                          onClick={() => setViewingZoomPhoto({ url: proofForm.proofFileUrl, caption: proofForm.proofFileName })}
+                          onClick={() => setViewingZoomPhoto({ url: proofForm.proofFileUrl, caption: 'Payment receipt' })}
                           className="w-14 h-14 rounded-lg bg-slate-900 border border-emerald-400 overflow-hidden relative cursor-pointer group shrink-0"
                           title="Click to preview slip"
                         >
@@ -3026,9 +3420,6 @@ function ProjectDetailsContent() {
                           <div className="flex items-center gap-1 text-emerald-800 font-bold text-xs">
                             <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
                             <span>Receipt Photo Attached</span>
-                          </div>
-                          <div className="text-[11px] text-slate-600 truncate mt-0.5">
-                            {proofForm.proofFileName || 'Official_Deposit_Receipt.jpg'}
                           </div>
                           <div className="text-[10px] text-emerald-700 font-medium">
                             Ready for platform escrow verification
@@ -3097,25 +3488,33 @@ function ProjectDetailsContent() {
                     <strong>Escrow Protection:</strong> Funds deposited are held securely in platform safekeeping. No money is released to the builder until you inspect the milestone work proof and mark it approved.
                   </p>
                 </div>
+                </div>
+                </div>
               </div>
 
               {/* Modal Footer Buttons */}
               <div className="px-6 py-3.5 bg-slate-50/80 border-t border-slate-200 flex items-center justify-end gap-2 shrink-0">
                 <button
                   type="button"
-                  onClick={() => setIsPaymentModalOpen(false)}
+                  onClick={handleCloseProjectPayment}
                   className="px-4 py-2 rounded-xl border border-slate-200 text-slate-700 font-bold hover:bg-slate-100 transition text-xs"
                 >
                   Cancel
                 </button>
                 <button
                   type="button"
-                  disabled={processingPayment}
+                  disabled={processingPayment || loadingPaymentMethods || !selectedPaymentMethod || availablePaymentBalance <= 0}
                   onClick={handleExecuteProofSubmission}
                   className="px-5 py-2 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-bold transition flex items-center gap-1.5 shadow-xs text-xs disabled:opacity-50"
                 >
                   <CreditCard className="w-3.5 h-3.5" />
-                  <span>{processingPayment ? 'Submitting...' : 'Submit Milestone Payment Proof'}</span>
+                  <span>
+                    {processingPayment
+                      ? 'Submitting...'
+                      : payAndApproveMilestoneId
+                        ? 'Submit Payment Proof'
+                        : 'Submit Project Payment Proof'}
+                  </span>
                 </button>
               </div>
             </div>
@@ -3311,33 +3710,103 @@ function ProjectDetailsContent() {
                           <strong>{formatCurrency(milestoneToApprove.homeowner_total_amount ?? milestoneToApprove.amount)}</strong>
                         </div>
                         <p className="text-[11px] text-emerald-900 leading-relaxed">
-                          Review the submitted work before continuing. If payment is due, submit your deposit for verification. Once verified, use this button to approve the milestone and release its escrow.
+                          Review the submitted work. The milestone can be approved only after its full homeowner amount is covered by verified funds; payments remain in escrow until an administrator authorizes release.
                         </p>
                       </div>
                     </div>
 
-                    {/* Action Buttons Matching Image 4 */}
-                    <div className="flex flex-col sm:flex-row items-center justify-end gap-3 pt-2">
-                      <button
-                        type="button"
-                        disabled={approvingMilestoneId === milestoneToApprove.id}
-                        onClick={() => milestonePaymentDue > 0
-                          ? handleOpenMilestonePayment(milestoneToApprove)
-                          : handleApproveMilestone(milestoneToApprove)}
-                        className="w-full sm:w-auto px-6 py-3 rounded-xl bg-[#136F48] hover:bg-[#0f5738] text-white font-extrabold text-xs shadow-md shadow-emerald-900/20 transition-all hover:scale-102 flex items-center justify-center gap-2 disabled:opacity-50"
-                      >
-                        {milestonePaymentDue > 0
-                          ? <CreditCard className="w-4 h-4" />
-                          : <CheckCircle2 className="w-4 h-4" />}
-                        <span>
-                          {approvingMilestoneId === milestoneToApprove.id
-                            ? 'Approving Milestone...'
-                            : milestonePaymentDue > 0
-                              ? `Pay & Approve Milestone (${formatCurrency(milestonePaymentDue)})`
+                    {(() => {
+                      const milestoneTotal = Number(
+                        milestoneToApprove.homeowner_total_amount ?? milestoneToApprove.amount ?? 0,
+                      );
+                      const funding = milestoneFunding.get(milestoneToApprove.id);
+                      const fundedAmount = funding?.allocated ?? 0;
+                      const outstandingAmount = funding?.outstanding ?? milestoneTotal;
+                      const pendingAmount = pendingMilestonePayments.get(milestoneToApprove.id) || 0;
+                      const amountToPayNow = getMilestonePaymentDue(milestoneToApprove);
+
+                      if (outstandingAmount <= 0) {
+                        return (
+                          <div className="rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-xs text-emerald-800">
+                            This milestone is fully funded with verified payments. You can approve the work.
+                          </div>
+                        );
+                      }
+
+                      return (
+                        <div className="rounded-xl border border-amber-200 bg-amber-50 p-4">
+                          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                            <div className="space-y-1 text-xs">
+                              <p className="font-bold text-amber-950">
+                                This milestone still needs {formatCurrency(outstandingAmount)}.
+                              </p>
+                              <p className="text-amber-800">
+                                Required: {formatCurrency(milestoneTotal)} · Verified toward milestone: {formatCurrency(fundedAmount)}
+                              </p>
+                              {pendingAmount > 0 && (
+                                <p className="text-amber-800">
+                                  {formatCurrency(pendingAmount)} is already awaiting payment verification.
+                                </p>
+                              )}
+                            </div>
+                            {pendingAmount > 0 ? (
+                              <span className="shrink-0 rounded-lg bg-white px-3 py-2 text-[11px] font-semibold text-amber-800">
+                                Pending Admin Payment Verification
+                              </span>
+                            ) : amountToPayNow <= 0 ? (
+                              <span className="shrink-0 rounded-lg bg-white px-3 py-2 text-[11px] font-semibold text-amber-800">
+                                No verified project balance is available for this payment.
+                              </span>
+                            ) : null}
+                          </div>
+                        </div>
+                      );
+                    })()}
+
+                    {/* Offer exactly one homeowner action based on verified funding. */}
+                    {(() => {
+                      const outstandingAmount = milestoneFunding.get(milestoneToApprove.id)?.outstanding
+                        ?? Number(milestoneToApprove.homeowner_total_amount ?? milestoneToApprove.amount ?? 0);
+                      const pendingAmount = pendingMilestonePayments.get(milestoneToApprove.id) || 0;
+                      const amountToPayNow = getMilestonePaymentDue(milestoneToApprove);
+
+                      if (outstandingAmount > 0 && pendingAmount > 0) {
+                        return (
+                          <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-center text-xs font-semibold text-amber-900">
+                            Payment proof is awaiting administrator verification. This milestone is not approved.
+                          </div>
+                        );
+                      }
+                      if (outstandingAmount > 0) {
+                        if (amountToPayNow <= 0) return null;
+                        return (
+                          <button
+                            type="button"
+                            onClick={() => handleOpenProjectPayment(milestoneToApprove)}
+                            className="w-full sm:w-auto px-6 py-3 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-extrabold text-xs shadow-md transition-all flex items-center justify-center gap-2"
+                          >
+                            <CreditCard className="w-4 h-4" />
+                            <span>Pay &amp; Approve Milestone</span>
+                          </button>
+                        );
+                      }
+
+                      return (
+                        <button
+                          type="button"
+                          disabled={approvingMilestoneId === milestoneToApprove.id}
+                          onClick={() => handleApproveMilestone(milestoneToApprove)}
+                          className="w-full sm:w-auto px-6 py-3 rounded-xl bg-[#136F48] hover:bg-[#0f5738] text-white font-extrabold text-xs shadow-md shadow-emerald-900/20 transition-all flex items-center justify-center gap-2 disabled:opacity-50"
+                        >
+                          <CheckCircle2 className="w-4 h-4" />
+                          <span>
+                            {approvingMilestoneId === milestoneToApprove.id
+                              ? 'Approving Milestone...'
                               : 'Approve Milestone'}
-                        </span>
-                      </button>
-                    </div>
+                          </span>
+                        </button>
+                      );
+                    })()}
 
                   </div>
 
@@ -3377,7 +3846,7 @@ function ProjectDetailsContent() {
                       </div>
 
                       <p className="text-[11px] text-slate-500">
-                        {paidMilestones.length} of {totalMilestonesCount} milestones approved.
+                        {completedMilestonesCount} of {totalMilestonesCount} milestones approved.
                       </p>
                     </div>
 
@@ -3409,7 +3878,7 @@ function ProjectDetailsContent() {
                       <div className="space-y-2.5">
                         {milestones.map((ms) => {
                           const isCurrent = ms.id === milestoneToApprove.id;
-                          const isDone = ms.status === 'paid';
+                          const isDone = ms.status === 'paid' || ms.status === 'approved';
                           return (
                             <div
                               key={ms.id}
@@ -3430,7 +3899,7 @@ function ProjectDetailsContent() {
                                 <span className="truncate max-w-[130px]">{cleanMilestoneTitle(ms.name)}</span>
                               </div>
                               <span className="font-semibold text-[10px]">
-                                {isDone ? 'Paid' : isCurrent ? 'In Review' : 'Locked'}
+                                {ms.status === 'paid' ? 'Released' : ms.status === 'approved' ? 'Approved' : isCurrent ? 'In Review' : 'Locked'}
                               </span>
                             </div>
                           );
@@ -3635,9 +4104,29 @@ function ProjectDetailsContent() {
         {/* ==================================================================== */}
         {/* MODAL 7: MATERIALS QUOTATION & BILL OF QUANTITIES (BOQ) BREAKDOWN    */}
         {/* ==================================================================== */}
-        {viewingMaterialQuote && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 p-3 backdrop-blur-xs sm:p-4">
-            <div className="quotation-print-area flex max-h-[92dvh] min-h-0 w-full max-w-5xl flex-col space-y-4 overflow-hidden rounded-3xl border border-slate-200 bg-white p-4 shadow-2xl animate-in fade-in zoom-in-95 duration-200 sm:space-y-5 sm:p-8">
+        {acceptedQuotationOnly && !awardedQuote && (
+          <div className="fixed inset-x-0 bottom-0 top-[57px] z-20 flex items-center justify-center bg-white p-6 text-center lg:left-72 lg:top-[65px]">
+            <div className="max-w-md">
+              <FileSpreadsheet className="mx-auto h-10 w-10 text-slate-300" />
+              <h2 className="mt-4 text-lg font-bold text-slate-900">Accepted quotation unavailable</h2>
+              <p className="mt-2 text-sm leading-relaxed text-slate-500">
+                The project is marked as awarded, but its accepted quotation could not be loaded.
+              </p>
+            </div>
+          </div>
+        )}
+
+        {quotationToDisplay && (
+          <div className={`fixed flex items-center justify-center p-0 sm:p-3 ${
+            acceptedQuotationOnly
+              ? 'inset-x-0 bottom-0 top-[57px] z-20 bg-white lg:left-72 lg:top-[65px]'
+              : 'inset-0 z-[60] bg-slate-900/60 backdrop-blur-xs'
+          }`}>
+            <div className={`quotation-print-area flex min-h-0 w-full flex-col space-y-4 overflow-hidden border border-slate-200 bg-white p-4 animate-in fade-in zoom-in-95 duration-200 sm:space-y-5 sm:p-8 ${
+              acceptedQuotationOnly
+                ? 'h-full max-h-full max-w-none rounded-none border-x-0 border-b-0 shadow-none'
+                : 'max-h-[92dvh] max-w-5xl rounded-3xl shadow-2xl'
+            }`}>
               <div className="flex shrink-0 items-start justify-between gap-3 border-b-2 border-slate-800 pb-4">
                 <div className="min-w-0">
                   <div className="mb-1 flex items-center gap-2 text-emerald-700 font-bold text-xs uppercase tracking-wider">
@@ -3645,10 +4134,10 @@ function ProjectDetailsContent() {
                     <span>Contractor Quotation</span>
                   </div>
                   <h3 className="text-base font-bold leading-snug text-slate-900 sm:text-xl">
-                    Quotation & Itemized Cost Schedule
+                    {acceptedQuotationOnly ? 'Accepted Contractor Quotation' : 'Quotation & Itemized Cost Schedule'}
                   </h3>
                   <p className="mt-1 text-xs leading-relaxed text-slate-500">
-                    Submitted for homeowner review
+                    {acceptedQuotationOnly ? 'The accepted proposal and its itemized cost schedule' : 'Submitted for homeowner review'}
                   </p>
                 </div>
                 <div className="quotation-document-controls flex shrink-0 items-center gap-2">
@@ -3656,7 +4145,7 @@ function ProjectDetailsContent() {
                     type="button"
                     onClick={() => {
                       const previousTitle = document.title;
-                      const reference = viewingMaterialQuote.quote_ref || viewingMaterialQuote.id.slice(0, 8).toUpperCase();
+                      const reference = quotationToDisplay.quote_ref || quotationToDisplay.id.slice(0, 8).toUpperCase();
                       document.title = `Quotation-${reference}`;
                       document.body.classList.add('printing-quotation');
                       window.addEventListener('afterprint', () => {
@@ -3670,20 +4159,22 @@ function ProjectDetailsContent() {
                     <Printer className="h-4 w-4" />
                     <span>Print / Save PDF</span>
                   </button>
-                  <button
-                    type="button"
-                    aria-label="Close quotation"
-                    onClick={() => setViewingMaterialQuote(null)}
-                    className="rounded-lg p-1.5 text-slate-400 transition hover:bg-slate-100 hover:text-slate-700"
-                  >
-                    <X className="h-5 w-5" />
-                  </button>
+                  {!acceptedQuotationOnly && (
+                    <button
+                      type="button"
+                      aria-label="Close quotation"
+                      onClick={() => setViewingMaterialQuote(null)}
+                      className="rounded-lg p-1.5 text-slate-400 transition hover:bg-slate-100 hover:text-slate-700"
+                    >
+                      <X className="h-5 w-5" />
+                    </button>
+                  )}
                 </div>
               </div>
 
               {/* Summary Cards */}
               {(() => {
-                const mq = viewingMaterialQuote?.material_quotation as SavedDetailedProposal | null | undefined;
+                const mq = quotationToDisplay.material_quotation as SavedDetailedProposal | null | undefined;
                 let items: QuoteDisplayItem[] = [];
                 if (mq?.materials || mq?.labor || mq?.equipment || mq?.overhead) {
                   items = [
@@ -3707,7 +4198,7 @@ function ProjectDetailsContent() {
                       unit: 'worker(s)',
                       unit_price: Number(item.dailyRate) || 0,
                       line_total: (Number(item.workers) || 0) * (Number(item.dailyRate) || 0) * (Number(item.days) || 0),
-                      supplier: viewingMaterialQuote?.contractor_profile?.business_name || 'Contractor',
+                      supplier: quotationToDisplay.contractor_profile?.business_name || 'Contractor',
                     })),
                     ...(mq.equipment || []).map((item, index) => ({
                       id: `equipment-${index}`,
@@ -3775,7 +4266,7 @@ function ProjectDetailsContent() {
                       unit: '',
                       unit_price: Number(mq.labor_cost),
                       line_total: Number(mq.labor_cost),
-                      supplier: viewingMaterialQuote.contractor_profile?.business_name || 'Contractor Direct Labor'
+                      supplier: quotationToDisplay.contractor_profile?.business_name || 'Contractor Direct Labor'
                     }] : []),
                     ...(Number(mq.equipment_cost) > 0 ? [{
                       id: 'equip-1',
@@ -3811,36 +4302,32 @@ function ProjectDetailsContent() {
                       supplier: 'Engineering Consulting'
                     }] : [])
                   ];
-                } else if ((viewingMaterialQuote as any)?.line_items && (viewingMaterialQuote as any).line_items.length > 0) {
-                  items = (viewingMaterialQuote as any).line_items;
+                } else if ((quotationToDisplay as any)?.line_items && (quotationToDisplay as any).line_items.length > 0) {
+                  items = (quotationToDisplay as any).line_items;
                 } else {
                   items = [];
                 }
 
-                const totalBOQ = viewingMaterialQuote?.price
-                  ? Number(viewingMaterialQuote.price)
+                const totalBOQ = quotationToDisplay.price
+                  ? Number(quotationToDisplay.price)
                   : items.reduce((sum, item) => sum + Number(item.line_total || 0), 0);
 
                 return (
                   <>
-                    <div className="grid shrink-0 grid-cols-2 gap-3 rounded-xl border border-slate-200 bg-slate-50 p-3 text-xs sm:grid-cols-4 sm:p-4">
-                      <div>
-                        <div className="text-[10px] font-bold uppercase tracking-wider text-slate-500">Quotation No.</div>
-                        <div className="mt-1 font-semibold text-slate-900">{viewingMaterialQuote.quote_ref || viewingMaterialQuote.id.slice(0, 8).toUpperCase()}</div>
-                      </div>
+                    <div className="grid shrink-0 grid-cols-1 gap-3 rounded-xl border border-slate-200 bg-slate-50 p-3 text-xs sm:grid-cols-3 sm:p-4">
                       <div>
                         <div className="text-[10px] font-bold uppercase tracking-wider text-slate-500">Project</div>
                         <div className="mt-1 font-semibold text-slate-900">{project?.title || 'Construction Project'}</div>
                       </div>
                       <div>
                         <div className="text-[10px] font-bold uppercase tracking-wider text-slate-500">Contractor</div>
-                        <div className="mt-1 font-semibold text-slate-900">{viewingMaterialQuote.contractor_profile?.business_name || 'Contractor'}</div>
+                        <div className="mt-1 font-semibold text-slate-900">{quotationToDisplay.contractor_profile?.business_name || 'Contractor'}</div>
                       </div>
                       <div>
                         <div className="text-[10px] font-bold uppercase tracking-wider text-slate-500">Date Submitted</div>
                         <div className="mt-1 font-semibold text-slate-900">
-                          {viewingMaterialQuote.submitted_at || viewingMaterialQuote.created_at
-                            ? formatDate(viewingMaterialQuote.submitted_at || viewingMaterialQuote.created_at)
+                          {quotationToDisplay.submitted_at || quotationToDisplay.created_at
+                            ? formatDate(quotationToDisplay.submitted_at || quotationToDisplay.created_at)
                             : '—'}
                         </div>
                       </div>
@@ -3851,7 +4338,6 @@ function ProjectDetailsContent() {
                         <thead className="bg-slate-50 border-b border-slate-200 text-[10px] font-bold text-slate-600 uppercase tracking-wider sticky top-0 z-10">
                           <tr>
                             <th className="py-2.5 px-2 w-8 text-center sm:px-3">#</th>
-                            <th className="py-2.5 px-2 sm:px-3">Category</th>
                             <th className="py-2.5 px-2 sm:px-3">Description & Scope</th>
                             <th className="py-2.5 px-2 sm:px-3">Specifications</th>
                             <th className="py-2.5 px-2 text-right sm:px-3">Qty</th>
@@ -3864,25 +4350,17 @@ function ProjectDetailsContent() {
                           {items.map((item, idx) => (
                             <tr key={item.id || idx} className="quotation-print-row hover:bg-slate-50/70 transition">
                               <td className="py-2.5 px-2 text-center text-slate-400 font-mono text-[11px] sm:px-3">{idx + 1}</td>
-                              <td className="py-2.5 px-2 sm:px-3">
-                                <span className={`px-2 py-0.5 rounded-md text-[10px] font-bold uppercase ${item.category === 'Labor' ? 'bg-amber-100 text-amber-900 border border-amber-200' :
-                                  item.category === 'Equipment' ? 'bg-purple-100 text-purple-900 border border-purple-200' :
-                                    'bg-blue-50 text-blue-800 border border-blue-200'
-                                  }`}>
-                                  {item.category || 'Material'}
-                                </span>
-                              </td>
                               <td className="py-2.5 px-2 font-semibold text-slate-900 sm:px-3">{item.item_name}</td>
                               <td className="py-2.5 px-2 text-slate-500 text-[11px] sm:px-3">{item.specifications || '—'}</td>
-                              <td className="py-2.5 px-2 text-right font-mono font-medium sm:px-3">{item.quantity}</td>
-                              <td className="py-2.5 px-2 text-slate-500 sm:px-3">{item.unit}</td>
+                              <td className="py-2.5 px-2 text-right font-mono font-medium sm:px-3">{item.quantity || '-'}</td>
+                              <td className="py-2.5 px-2 text-slate-500 sm:px-3">{item.unit?.trim() || '-'}</td>
                               <td className="py-2.5 px-2 text-right font-mono text-slate-700 sm:px-3">{formatCurrency(Number(item.unit_price) || 0)}</td>
                               <td className="py-2.5 px-2 text-right font-mono font-bold text-slate-900 sm:px-3">{formatCurrency(item.line_total)}</td>
                             </tr>
                           ))}
                           {items.length === 0 && (
                             <tr>
-                              <td colSpan={8} className="p-8 text-center text-xs text-slate-500">
+                              <td colSpan={7} className="p-8 text-center text-xs text-slate-500">
                                 No itemized cost details are available for this quotation.
                               </td>
                             </tr>
@@ -3895,10 +4373,7 @@ function ProjectDetailsContent() {
                         <article key={item.id || idx} className="rounded-xl border border-slate-200 bg-white p-3">
                           <div className="flex items-start justify-between gap-3">
                             <div className="min-w-0">
-                              <span className="text-[10px] font-bold uppercase tracking-wide text-emerald-700">
-                                {item.category || 'Material'}
-                              </span>
-                              <h4 className="mt-0.5 break-words text-sm font-bold text-slate-900">{item.item_name}</h4>
+                              <h4 className="break-words text-sm font-bold text-slate-900">{item.item_name}</h4>
                             </div>
                             <span className="shrink-0 text-right text-sm font-extrabold text-slate-900">
                               {formatCurrency(item.line_total)}

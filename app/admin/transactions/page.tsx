@@ -19,7 +19,7 @@ import {
   MapPin, 
   Clock 
 } from 'lucide-react';
-import { ContractorPayoutAccount, PaymentTransactionRecord } from '@/types/database';
+import { ContractorPayoutAccount, Milestone, PaymentTransactionRecord, Payout } from '@/types/database';
 import { formatNumberInput, parseNumberInput } from '@/lib/utils/formatters';
 
 interface ProjectSafekeepingSummary {
@@ -33,21 +33,63 @@ interface ProjectSafekeepingSummary {
   status: string;
 }
 
+type MilestonePayoutInfo = Pick<Milestone, 'id' | 'project_id' | 'seq' | 'name' | 'amount' | 'status'>;
+type ProjectPayoutSummary = Pick<Payout, 'project_id' | 'milestone_id' | 'gross_amount' | 'status'>;
+
 const PROJECTS_PER_PAGE = 20;
 const QUERY_PAGE_SIZE = 500;
 
-function getErrorMessage(error: unknown): string {
-  if (error instanceof Error) return error.message;
-  if (typeof error === 'object' && error !== null && 'message' in error && typeof error.message === 'string') {
-    const message = error.message;
-    if (message.includes('admin_verify_homeowner_payment') && message.includes('schema cache')) {
-      return 'Payment approval is not installed in Supabase yet. Apply migration 88, then refresh this page.';
-    }
-    const details = 'details' in error && typeof error.details === 'string' ? error.details : '';
-    const hint = 'hint' in error && typeof error.hint === 'string' ? error.hint : '';
-    return [message, details, hint].filter(Boolean).join(' — ');
+function getErrorMessage(error: unknown, workflow: 'payment' | 'payout'): string {
+  const values = typeof error === 'object' && error !== null
+    ? error as { message?: unknown; details?: unknown; hint?: unknown; code?: unknown }
+    : null;
+  const message = error instanceof Error
+    ? error.message
+    : typeof values?.message === 'string'
+    ? values.message
+    : typeof error === 'string'
+    ? error
+    : '';
+  const details = typeof values?.details === 'string' ? values.details : '';
+  const hint = typeof values?.hint === 'string' ? values.hint : '';
+  const code = typeof values?.code === 'string' ? values.code : '';
+  const description = [message, details, hint].filter(Boolean).join(' — ');
+
+  if (
+    workflow === 'payment'
+    && description.includes('admin_verify_homeowner_payment')
+    && description.includes('schema cache')
+  ) {
+    return 'Payment approval is not installed in Supabase yet. Apply migration 88, then refresh this page.';
   }
-  return 'Unable to confirm received funds. Please try again.';
+  if (
+    workflow === 'payout'
+    && (
+    code === 'PGRST202'
+    || (
+      description.includes('admin_record_contractor_milestone_payout')
+      && (description.includes('schema cache') || code === '42883')
+    )
+    )
+  ) {
+    return 'Milestone transfer support is not installed in Supabase yet. Apply migration 116, then refresh this page.';
+  }
+  if (
+    workflow === 'payout'
+    && code === '23505'
+    && description.includes('payment_transactions_payout_tx_ref_key')
+  ) {
+    return 'This bank or trace reference is already recorded on another payment. Enter the unique reference for this contractor transfer. Apply migration 117 to prevent milestone transfers from reusing one reference across multiple homeowner payments.';
+  }
+
+  if (description) return description;
+  if (code) return `Supabase returned database error ${code} without a message.`;
+  if (values) {
+    return workflow === 'payout'
+      ? 'Supabase returned an empty error object. Check that migration 116 is applied and the Supabase schema cache has refreshed.'
+      : 'Supabase returned an empty error object while verifying the homeowner payment.';
+  }
+  return error == null ? 'No error details were returned by Supabase.' : `Unexpected error response: ${String(error)}`;
 }
 
 // Clean helper to remove underscores and format text
@@ -60,6 +102,8 @@ function removeUnderscore(text: string | null | undefined): string {
 
 export default function AdminTransactionsPage() {
   const [transactions, setTransactions] = useState<PaymentTransactionRecord[]>([]);
+  const [milestonesById, setMilestonesById] = useState<Map<string, MilestonePayoutInfo>>(new Map());
+  const [projectPayouts, setProjectPayouts] = useState<ProjectPayoutSummary[]>([]);
   const [projects, setProjects] = useState<ProjectSafekeepingSummary[]>([]);
   const [loading, setLoading] = useState(true);
   const [projectDataLoaded, setProjectDataLoaded] = useState(false);
@@ -78,6 +122,8 @@ export default function AdminTransactionsPage() {
 
   // Contractor Payout Transfer Modal State
   const [transferringTx, setTransferringTx] = useState<PaymentTransactionRecord | null>(null);
+  const [transferringMilestoneId, setTransferringMilestoneId] = useState<string | null>(null);
+  const [projectTransferViewId, setProjectTransferViewId] = useState<string | null>(null);
   const [transferAmount, setTransferAmount] = useState<string>('');
   const [transferMethod, setTransferMethod] = useState<'bank_transfer' | 'gcash' | 'maya'>('bank_transfer');
   const [contractorPayoutAccounts, setContractorPayoutAccounts] = useState<ContractorPayoutAccount[]>([]);
@@ -130,10 +176,7 @@ export default function AdminTransactionsPage() {
 
         const accounts = (data || []) as ContractorPayoutAccount[];
         setContractorPayoutAccounts(accounts);
-        const preferredAccount = accounts.find(account => account.is_primary && account.status === 'VERIFIED')
-          || accounts.find(account => account.status === 'VERIFIED')
-          || accounts.find(account => account.is_primary)
-          || accounts[0];
+        const preferredAccount = accounts.find(account => account.is_primary) || accounts[0];
         setSelectedPayoutAccountId(preferredAccount?.id || '');
         if (preferredAccount) setTransferMethod(preferredAccount.payout_method);
       } catch (error) {
@@ -267,10 +310,28 @@ export default function AdminTransactionsPage() {
           pageTransactions.push(...rows);
           if (rows.length < QUERY_PAGE_SIZE) break;
         }
-        if (!cancelled) setTransactions(pageTransactions);
+        const { data: milestoneRows, error: milestonesError } = await supabase
+          .from('milestones')
+          .select('id, project_id, seq, name, amount, status')
+          .in('project_id', pagedProjectIds);
+        if (milestonesError) throw milestonesError;
+        const { data: payoutRows, error: payoutsError } = await supabase
+          .from('payouts')
+          .select('project_id, milestone_id, gross_amount, status')
+          .in('project_id', pagedProjectIds);
+        if (payoutsError) throw payoutsError;
+        if (!cancelled) {
+          setTransactions(pageTransactions);
+          setMilestonesById(new Map(
+            ((milestoneRows || []) as MilestonePayoutInfo[]).map(milestone => [milestone.id, milestone])
+          ));
+          setProjectPayouts((payoutRows || []) as ProjectPayoutSummary[]);
+        }
       } catch (err) {
         if (!cancelled) {
           setTransactions([]);
+          setMilestonesById(new Map());
+          setProjectPayouts([]);
           setLoadError(err instanceof Error ? err.message : 'Unable to load payment records.');
         }
       } finally {
@@ -302,8 +363,58 @@ export default function AdminTransactionsPage() {
     return transactionsMap;
   }, [transactions]);
 
+  const payoutsByProject = useMemo(() => {
+    const payoutsMap = new Map<string, ProjectPayoutSummary[]>();
+    for (const payout of projectPayouts) {
+      if (!payout.project_id) continue;
+      const projectPayoutRows = payoutsMap.get(payout.project_id) || [];
+      projectPayoutRows.push(payout);
+      payoutsMap.set(payout.project_id, projectPayoutRows);
+    }
+    return payoutsMap;
+  }, [projectPayouts]);
+
   const getProjectInfo = (projectId?: string | null): ProjectSafekeepingSummary | null =>
     projectId ? projectsById.get(projectId) || null : null;
+
+  const getVerifiedPaymentAmount = (tx: PaymentTransactionRecord) =>
+    Number(tx.verified_amount ?? (tx.amount_centavos || 0) / 100);
+
+  const getFundingTransaction = (
+    projectId: string,
+    milestoneId: string,
+    projectTransactions: PaymentTransactionRecord[]
+  ) => projectTransactions.find(tx =>
+    tx.payment_status === 'PAID'
+    && Boolean(tx.recipient_id)
+    && (tx.milestone_id === milestoneId || tx.milestone_id === null)
+  ) || null;
+
+  const openTransferModal = (projectId: string, milestone: MilestonePayoutInfo) => {
+    if (milestone.status !== 'approved') return;
+    const projectTransactions = transactionsByProject.get(projectId) || [];
+    const fundingTransaction = getFundingTransaction(projectId, milestone.id, projectTransactions);
+    if (!fundingTransaction) {
+      setActionNotice({
+        text: 'No verified homeowner payment is available to fund this approved milestone.',
+        type: 'error',
+      });
+      return;
+    }
+    setProjectTransferViewId(null);
+    setTransferringTx(fundingTransaction);
+    setTransferringMilestoneId(milestone.id);
+    setTransferAmount(milestone.amount.toString());
+    setTransferMethod('bank_transfer');
+    setContractorPayoutAccounts([]);
+    setSelectedPayoutAccountId('');
+    setPayoutAccountsLoading(Boolean(fundingTransaction.recipient_id));
+    setPayoutAccountsError(null);
+    setPayoutBankRef('');
+    setPayoutProofUrl('');
+    setPayoutProofFileName('');
+    setTransferNotes(`Disbursement for approved milestone ${milestone.name}`);
+  };
 
   // Confirm Received Funds into Safekeeping
   const handleConfirmReceivedFunds = async (tx: PaymentTransactionRecord) => {
@@ -331,7 +442,7 @@ export default function AdminTransactionsPage() {
         type: 'success'
       });
     } catch (err: unknown) {
-      const message = getErrorMessage(err);
+      const message = getErrorMessage(err, 'payment');
       console.error('Error confirming payment:', message);
       setActionNotice({ text: `Error confirming payment: ${message}`, type: 'error' });
     } finally {
@@ -357,16 +468,23 @@ export default function AdminTransactionsPage() {
     const supabase = createClient();
 
     try {
-      if (!transferringTx.project_id || !transferringTx.recipient_id || !transferringTx.milestone_id) {
-        throw new Error('The transaction must include a project, contractor, and milestone before payout.');
+      const approvedMilestone = transferringMilestoneId
+        ? milestonesById.get(transferringMilestoneId)
+        : null;
+      if (!transferringTx.project_id || !transferringTx.recipient_id || !approvedMilestone || approvedMilestone.project_id !== transferringTx.project_id || approvedMilestone.status !== 'approved') {
+        throw new Error('Only verified funds for an approved milestone can be transferred to the contractor.');
+      }
+      if (Math.abs(numericAmount - approvedMilestone.amount) > 0.005) {
+        throw new Error(`The transfer amount must match the approved milestone amount (${approvedMilestone.amount.toLocaleString('en-US')}).`);
       }
       if (payoutAccountsLoading) throw new Error('Wait for the contractor payout details to finish loading.');
       if (payoutAccountsError) throw new Error(`Could not load the contractor payout details: ${payoutAccountsError}`);
       const selectedPayoutAccount = contractorPayoutAccounts.find(account => account.id === selectedPayoutAccountId);
       const payoutMethod = selectedPayoutAccount?.payout_method || transferMethod;
       const disburseRef = payoutBankRef.trim();
-      const { error: payoutError } = await supabase.rpc('admin_record_contractor_payout', {
+      const { error: payoutError } = await supabase.rpc('admin_record_contractor_milestone_payout', {
         p_payment_id: transferringTx.id,
+        p_milestone_id: approvedMilestone.id,
         p_amount: numericAmount,
         p_payout_method: payoutMethod,
         p_payout_account_id: selectedPayoutAccount?.id || null,
@@ -377,15 +495,25 @@ export default function AdminTransactionsPage() {
       });
       if (payoutError) throw payoutError;
 
-      const updatedTx: PaymentTransactionRecord = {
-        ...transferringTx,
-        payout_status: 'PAID',
-        payout_tx_ref: disburseRef,
-        payout_proof_url: payoutProofUrl || null
-      };
-
-      setTransactions(prev => prev.map(t => t.id === transferringTx.id ? updatedTx : t));
+      setTransactions(prev => prev.map(t =>
+        t.id === transferringTx.id || (t.project_id === transferringTx.project_id && t.milestone_id === approvedMilestone.id)
+          ? {
+              ...t,
+              payout_status: 'PAID',
+              payout_tx_ref: disburseRef,
+              payout_proof_url: payoutProofUrl || null,
+            }
+          : t
+      ));
+      setMilestonesById(prev => new Map(prev).set(approvedMilestone.id, { ...approvedMilestone, status: 'paid' }));
+      const commissionPercent = projectsById.get(transferringTx.project_id)?.commissionPercent || 0;
+      const feeAmount = Math.round(numericAmount * commissionPercent) / 100;
+      setProjectPayouts(prev => [
+        ...prev,
+        { project_id: transferringTx.project_id, milestone_id: approvedMilestone.id, gross_amount: numericAmount + feeAmount, status: 'sent' },
+      ]);
       setTransferringTx(null);
+      setTransferringMilestoneId(null);
       setPayoutProofUrl('');
       setPayoutProofFileName('');
       setPayoutBankRef('');
@@ -396,13 +524,18 @@ export default function AdminTransactionsPage() {
         type: 'success'
       });
     } catch (err: unknown) {
-      const errorMessage = err instanceof Error ? err.message : 'Unknown error';
-      const code = typeof err === 'object' && err !== null && 'code' in err ? err.code : '';
-      const message = code === 'PGRST202' || errorMessage.includes('admin_record_contractor_payout')
-        ? 'Payout repair is not installed in Supabase yet. Apply migration 91, then refresh and retry.'
-        : errorMessage;
-      console.error('Error executing payout:', { message, code });
-      setActionNotice({ text: `Error executing payout transfer: ${message}`, type: 'error' });
+      const errorMessage = getErrorMessage(err, 'payout');
+      const code = typeof err === 'object' && err !== null && 'code' in err && typeof err.code === 'string'
+        ? err.code
+        : '';
+      console.error('Error executing payout:', {
+        message: errorMessage,
+        code,
+        details: typeof err === 'object' && err !== null && 'details' in err ? err.details : undefined,
+        hint: typeof err === 'object' && err !== null && 'hint' in err ? err.hint : undefined,
+        error: err,
+      });
+      setActionNotice({ text: `Error executing payout transfer: ${errorMessage}`, type: 'error' });
     } finally {
       setIsTransferring(false);
     }
@@ -483,22 +616,24 @@ export default function AdminTransactionsPage() {
       <div className="space-y-4">
         {loadError && <div role="alert" className="p-4 rounded-lg bg-red-50 text-red-700 text-xs">{loadError}</div>}
         {/* SIMPLE SEARCH & PROJECT SELECTOR HEADER */}
-        <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 bg-white p-3 rounded-2xl border border-slate-200 shadow-2xs">
+        <div className="flex flex-col gap-3 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm sm:flex-row sm:items-center sm:justify-between">
           <div className="flex items-center gap-2">
-            <Building2 className="w-4 h-4 text-blue-600" />
-            <h2 className="text-xs font-bold text-slate-900 uppercase tracking-wider">
+            <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-blue-50 text-blue-600">
+              <Building2 className="h-4 w-4" />
+            </span>
+            <h2 className="text-xs font-bold uppercase tracking-wider text-slate-900">
               Projects ({filteredProjects.length})
             </h2>
           </div>
 
-          <div className="flex items-center gap-2">
+          <div className="grid grid-cols-[minmax(0,1fr)_auto] gap-2 sm:flex sm:items-center">
             <select
               value={selectedProjectId}
               onChange={(e) => {
                 setSelectedProjectId(e.target.value);
                 setProjectPage(0);
               }}
-              className="px-3 py-1.5 rounded-xl border border-slate-200 text-xs font-bold text-slate-700 bg-slate-50 focus:bg-white focus:outline-none focus:ring-2 focus:ring-blue-500 cursor-pointer"
+              className="col-span-2 min-w-0 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-xs font-bold text-slate-700 focus:bg-white focus:outline-none focus:ring-2 focus:ring-blue-500 sm:col-span-1 sm:max-w-64"
             >
               <option value="all">📁 All Projects ({projects.length})</option>
               {projects.map(p => (
@@ -518,14 +653,14 @@ export default function AdminTransactionsPage() {
                   setSearchTerm(e.target.value);
                   setProjectPage(0);
                 }}
-                className="w-full pl-8 pr-3 py-1.5 rounded-xl border border-slate-200 text-xs focus:outline-none focus:ring-2 focus:ring-blue-500 bg-slate-50 focus:bg-white"
+                className="w-full rounded-xl border border-slate-200 bg-slate-50 py-2 pl-8 pr-3 text-xs focus:bg-white focus:outline-none focus:ring-2 focus:ring-blue-500"
               />
             </div>
 
             <button
               type="button"
               onClick={() => loadData()}
-              className="p-2 rounded-xl border border-slate-200 text-slate-500 hover:text-slate-800 hover:bg-slate-50 transition shrink-0"
+              className="justify-self-end rounded-xl border border-slate-200 p-2 text-slate-500 transition hover:bg-slate-50 hover:text-slate-800"
               title="Refresh"
             >
               <RefreshCw className="w-3.5 h-3.5" />
@@ -546,19 +681,23 @@ export default function AdminTransactionsPage() {
           pagedProjects.map((proj) => {
             // Transactions strictly belonging to this project
             const projTxs = transactionsByProject.get(proj.id) || [];
+            const projPayoutRows = payoutsByProject.get(proj.id) || [];
             const projReceived = projTxs
               .filter(t => t.payment_status === 'PAID' || t.payment_status === 'SUCCEEDED')
-              .reduce((acc, t) => acc + (t.amount_centavos || 0), 0) / 100;
-            const projDisbursed = projTxs
-              .filter(t => t.payout_status === 'PAID')
-              .reduce((acc, t) => acc + (t.amount_centavos || 0), 0) / 100;
-            const projVaultBalance = Math.max(0, projReceived - projDisbursed);
+              .reduce((acc, t) => acc + getVerifiedPaymentAmount(t), 0);
+            const projDisbursed = projPayoutRows
+              .filter(payout => payout.status === 'sent')
+              .reduce((acc, payout) => acc + Number(payout.gross_amount || 0), 0);
+            const projReserved = projPayoutRows
+              .filter(payout => payout.status === 'pending' || payout.status === 'sent')
+              .reduce((acc, payout) => acc + Number(payout.gross_amount || 0), 0);
+            const projVaultBalance = Math.max(0, projReceived - projReserved);
             const projRemaining = Math.max(0, proj.contractPrice - projReceived);
 
             return (
-              <div key={proj.id} className="bg-white rounded-2xl border border-slate-200 overflow-hidden shadow-2xs">
+              <div key={proj.id} className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm transition-shadow hover:shadow-md">
                 {/* PROJECT HEADER & MINI FINANCIAL SUMMARY */}
-                <div className="p-4 border-b border-slate-100 bg-slate-50/80 flex flex-col md:flex-row items-start md:items-center justify-between gap-3">
+                <div className="flex flex-col items-start justify-between gap-4 border-b border-slate-200 bg-gradient-to-r from-slate-50 to-white p-4 sm:p-5 xl:flex-row xl:items-center">
                   <div className="flex items-center gap-3 min-w-0">
                     <div className="w-9 h-9 rounded-xl bg-blue-100 text-blue-700 flex items-center justify-center font-bold shrink-0">
                       <Building2 className="w-4 h-4" />
@@ -584,15 +723,15 @@ export default function AdminTransactionsPage() {
                   </div>
 
                   {/* SIMPLE PROJECT FINANCIAL BAR */}
-                  <div className="flex items-center gap-3 text-xs flex-wrap">
-                    <div className="px-3 py-1 bg-white rounded-xl border border-slate-200">
+                  <div className="flex w-full flex-wrap items-center gap-2 text-xs xl:w-auto xl:justify-end">
+                    <div className="min-w-[112px] rounded-xl border border-slate-200 bg-white px-3 py-2">
                       <span className="text-[10px] text-slate-400 block uppercase font-bold">Total Contract</span>
                       <strong className="text-slate-900 font-mono">
                         ₱{proj.contractPrice.toLocaleString('en-US', { maximumFractionDigits: 0 })}
                       </strong>
                     </div>
 
-                    <div className="px-3 py-1 bg-emerald-50 rounded-xl border border-emerald-200">
+                    <div className="min-w-[140px] rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2">
                       <span className="text-[10px] text-emerald-600 block uppercase font-bold flex items-center gap-1">
                         <ShieldCheck className="w-3 h-3" />
                         <span>In Safekeeping Vault</span>
@@ -602,19 +741,28 @@ export default function AdminTransactionsPage() {
                       </strong>
                     </div>
 
-                    <div className="px-3 py-1 bg-indigo-50 rounded-xl border border-indigo-200">
+                    <div className="min-w-[112px] rounded-xl border border-indigo-200 bg-indigo-50 px-3 py-2">
                       <span className="text-[10px] text-indigo-600 block uppercase font-bold">Transferred</span>
                       <strong className="text-indigo-900 font-mono">
                         ₱{projDisbursed.toLocaleString('en-US', { maximumFractionDigits: 0 })}
                       </strong>
                     </div>
 
-                    <div className="px-3 py-1 bg-slate-50 rounded-xl border border-slate-200">
+                    <div className="min-w-[112px] rounded-xl border border-slate-200 bg-slate-50 px-3 py-2">
                       <span className="text-[10px] text-slate-400 block uppercase font-bold">Remaining Due</span>
                       <strong className="text-slate-700 font-mono">
                         ₱{projRemaining.toLocaleString('en-US', { maximumFractionDigits: 0 })}
                       </strong>
                     </div>
+                    <button
+                      type="button"
+                      disabled={projReceived <= 0}
+                      onClick={() => setProjectTransferViewId(proj.id)}
+                      className="inline-flex items-center gap-1.5 rounded-xl bg-gradient-to-r from-blue-600 to-indigo-600 px-3 py-2 font-bold text-white shadow-xs transition hover:from-blue-700 hover:to-indigo-700 disabled:cursor-not-allowed disabled:opacity-50"
+                    >
+                      <ArrowUpRight className="h-3.5 w-3.5" />
+                      Transfer to Contractor
+                    </button>
                   </div>
                 </div>
 
@@ -626,15 +774,16 @@ export default function AdminTransactionsPage() {
                       No payments submitted yet for this project.
                     </div>
                   ) : (
-                    <table className="w-full text-left border-collapse text-xs">
+                    <table className="w-full min-w-[1020px] border-collapse text-left text-xs">
                       <thead>
-                        <tr className="bg-slate-50 border-b border-slate-200 text-slate-600 uppercase tracking-wider font-bold text-[10px]">
-                          <th className="py-2.5 px-4">Name of the Payer</th>
-                          <th className="py-2.5 px-4">Method</th>
-                          <th className="py-2.5 px-4">Contractor</th>
-                          <th className="py-2.5 px-4">Amount</th>
-                          <th className="py-2.5 px-4">Proof</th>
-                          <th className="py-2.5 px-4 text-right">Action</th>
+                        <tr className="border-b border-slate-200 bg-slate-50 text-[10px] font-bold uppercase tracking-wider text-slate-500">
+                          <th className="px-5 py-3">Name of the Payer</th>
+                          <th className="px-5 py-3">Method</th>
+                          <th className="px-5 py-3">Payment For</th>
+                          <th className="px-5 py-3">Contractor</th>
+                          <th className="px-5 py-3">Amount</th>
+                          <th className="px-5 py-3">Proof</th>
+                          <th className="px-5 py-3 text-right">Action</th>
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-slate-100 text-slate-700">
@@ -642,11 +791,15 @@ export default function AdminTransactionsPage() {
                           const isPending = ['PENDING_VERIFICATION', 'PENDING', 'CREATED'].includes(tx.payment_status);
                           const isSucceeded = tx.payment_status === 'PAID' || tx.payment_status === 'SUCCEEDED';
                           const isRejected = tx.payment_status === 'REJECTED';
+                          const paymentMilestone = tx.milestone_id ? milestonesById.get(tx.milestone_id) : null;
+                          const milestonePayout = paymentMilestone
+                            ? projPayoutRows.find(payout => payout.milestone_id === paymentMilestone.id)
+                            : null;
 
                           return (
-                            <tr key={tx.id} className="hover:bg-slate-50/60 transition">
+                            <tr key={tx.id} className="transition-colors hover:bg-blue-50/30">
                               {/* 1. NAME OF THE PAYER */}
-                              <td className="py-3 px-4">
+                              <td className="px-5 py-4">
                                 <div className="font-bold text-slate-900">
                                   {tx.sender_name && tx.sender_name !== 'Homeowner' 
                                     ? tx.sender_name 
@@ -655,7 +808,7 @@ export default function AdminTransactionsPage() {
                               </td>
 
                               {/* 2. METHOD */}
-                              <td className="py-3 px-4">
+                              <td className="px-5 py-4">
                                 <span className="font-semibold text-slate-800 capitalize">
                                   {removeUnderscore(tx.provider || tx.payment_method)}
                                 </span>
@@ -666,18 +819,31 @@ export default function AdminTransactionsPage() {
                                 )}
                               </td>
 
-                              {/* 3. CONTRACTOR */}
-                              <td className="py-3 px-4">
+                              {/* 3. PAYMENT ALLOCATION */}
+                              <td className="px-5 py-4">
+                                {tx.milestone_id ? (
+                                  <span className="font-medium text-slate-800">
+                                    {paymentMilestone
+                                      ? `Milestone ${paymentMilestone.seq}: ${paymentMilestone.name}`
+                                      : 'Milestone payment'}
+                                  </span>
+                                ) : (
+                                  <span className="font-medium text-slate-600">Full project payment</span>
+                                )}
+                              </td>
+
+                              {/* 4. CONTRACTOR */}
+                              <td className="px-5 py-4">
                                 <div className="font-medium text-slate-800">{proj.contractorName}</div>
                               </td>
 
-                              {/* 4. AMOUNT */}
-                              <td className="py-3 px-4 font-mono font-black text-slate-900 text-sm">
+                              {/* 5. AMOUNT */}
+                              <td className="px-5 py-4 font-mono text-sm font-black text-slate-900">
                                 ₱{((tx.amount_centavos || 0) / 100).toLocaleString('en-US', { maximumFractionDigits: 0 })}
                               </td>
 
-                              {/* 5. PROOF */}
-                              <td className="py-3 px-4">
+                              {/* 6. PROOF */}
+                              <td className="px-5 py-4">
                                 {tx.proof_file_url ? (
                                   <button
                                     type="button"
@@ -692,8 +858,8 @@ export default function AdminTransactionsPage() {
                                 )}
                               </td>
 
-                              {/* 6. ACTION */}
-                              <td className="py-3 px-4 text-right">
+                              {/* 7. ACTION */}
+                              <td className="px-5 py-4 text-right">
                                 {isPending ? (
                                   <div className="inline-flex items-center gap-1.5 justify-end">
                                     <button
@@ -716,7 +882,7 @@ export default function AdminTransactionsPage() {
                                     </button>
                                   </div>
                                 ) : isSucceeded ? (
-                                  tx.payout_status === 'PAID' ? (
+                                  tx.payout_status === 'PAID' || milestonePayout ? (
                                     <div className="inline-flex items-center gap-1.5 justify-end">
                                       <span className="px-2.5 py-1 rounded-xl bg-slate-100 text-slate-700 font-bold text-xs flex items-center gap-1 border border-slate-200">
                                         <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
@@ -742,26 +908,15 @@ export default function AdminTransactionsPage() {
                                       )}
                                     </div>
                                   ) : (
-                                    <button
-                                      type="button"
-                                      onClick={() => {
-                                        setTransferringTx(tx);
-                                        setTransferAmount(((tx.amount_centavos || 0) / 100).toString());
-                                        setTransferMethod('bank_transfer');
-                                        setContractorPayoutAccounts([]);
-                                        setSelectedPayoutAccountId('');
-                                        setPayoutAccountsLoading(Boolean(tx.recipient_id));
-                                        setPayoutAccountsError(null);
-                                        setPayoutBankRef('');
-                                        setPayoutProofUrl('');
-                                        setPayoutProofFileName('');
-                                        setTransferNotes(`Disburse verified homeowner payment ${tx.transaction_ref} for ${proj.title}`);
-                                      }}
-                                      className="px-3 py-1.5 rounded-xl bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white font-bold text-xs shadow-xs transition flex items-center gap-1.5 ml-auto"
-                                    >
-                                      <ArrowUpRight className="w-3.5 h-3.5" />
-                                      <span>Transfer to Contractor</span>
-                                    </button>
+                                    <span className="text-[11px] font-semibold text-slate-400">
+                                      {tx.payment_status !== 'PAID'
+                                        ? 'Awaiting payment verification'
+                                        : paymentMilestone?.status === 'approved'
+                                        ? 'Ready for project transfer'
+                                        : paymentMilestone
+                                        ? 'Awaiting milestone approval'
+                                        : 'Held in project vault'}
+                                    </span>
                                   )
                                 ) : isRejected ? (
                                   <span className="text-red-600 text-xs font-semibold italic">
@@ -806,6 +961,131 @@ export default function AdminTransactionsPage() {
           </div>
         )}
       </div>
+
+      {projectTransferViewId && (() => {
+        const transferProject = projectsById.get(projectTransferViewId);
+        const transferProjectTransactions = transactionsByProject.get(projectTransferViewId) || [];
+        const receivedAmount = transferProjectTransactions
+          .filter(tx => tx.payment_status === 'PAID' || tx.payment_status === 'SUCCEEDED')
+          .reduce((total, tx) => total + getVerifiedPaymentAmount(tx), 0);
+        const projectPayoutRows = payoutsByProject.get(projectTransferViewId) || [];
+        const projectMilestones = Array.from(milestonesById.values())
+          .filter(milestone => milestone.project_id === projectTransferViewId)
+          .sort((a, b) => a.seq - b.seq);
+        const reservedAmount = projectPayoutRows
+          .filter(payout => payout.status === 'pending' || payout.status === 'sent')
+          .reduce((total, payout) => total + Number(payout.gross_amount || 0), 0);
+        const vaultAmount = Math.max(0, receivedAmount - reservedAmount);
+
+        return (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 p-4 backdrop-blur-xs">
+            <div className="w-full max-w-3xl overflow-hidden rounded-3xl border border-slate-100 bg-white shadow-2xl">
+              <div className="flex items-center justify-between border-b border-slate-100 bg-gradient-to-r from-blue-900 to-indigo-900 p-5 text-white">
+                <div>
+                  <h3 className="text-sm font-bold">Transfer to Contractor</h3>
+                  <p className="mt-1 text-[11px] text-blue-200">{transferProject?.title || 'Project payment overview'}</p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setProjectTransferViewId(null)}
+                  className="rounded-full p-1.5 text-blue-200 transition hover:bg-white/20 hover:text-white"
+                  aria-label="Close transfer overview"
+                >
+                  <X className="h-5 w-5" />
+                </button>
+              </div>
+
+              <div className="max-h-[75vh] space-y-4 overflow-y-auto p-5">
+                <div className="grid gap-3 sm:grid-cols-2">
+                  <div className="rounded-xl border border-slate-200 bg-slate-50 p-3">
+                    <div className="text-[10px] font-bold uppercase text-slate-500">Total verified from homeowner</div>
+                    <div className="mt-1 font-mono text-lg font-bold text-slate-900">
+                      ₱{receivedAmount.toLocaleString('en-US', { maximumFractionDigits: 2 })}
+                    </div>
+                  </div>
+                  <div className="rounded-xl border border-emerald-200 bg-emerald-50 p-3">
+                    <div className="text-[10px] font-bold uppercase text-emerald-700">Available in project vault</div>
+                    <div className="mt-1 font-mono text-lg font-bold text-emerald-900">
+                      ₱{vaultAmount.toLocaleString('en-US', { maximumFractionDigits: 2 })}
+                    </div>
+                  </div>
+                </div>
+
+                <p className="rounded-xl border border-blue-100 bg-blue-50 p-3 text-[11px] leading-relaxed text-blue-800">
+                  Each approved milestone is transferred once for its full milestone amount, even when the homeowner paid in multiple transactions. Full-project payments remain in the vault until an approved milestone is ready.
+                </p>
+
+                <section className="space-y-2">
+                  <h4 className="text-xs font-bold uppercase tracking-wide text-slate-700">Milestone transfers</h4>
+                  {projectMilestones.length === 0 ? (
+                    <div className="rounded-xl border border-slate-200 p-5 text-center text-xs text-slate-500">
+                      No milestones are available for this project.
+                    </div>
+                  ) : (
+                    <div className="overflow-x-auto rounded-xl border border-slate-200">
+                      <table className="w-full min-w-[620px] text-left text-xs">
+                        <thead className="bg-slate-50 text-[10px] font-bold uppercase tracking-wide text-slate-500">
+                          <tr>
+                            <th className="px-4 py-3">Milestone</th>
+                            <th className="px-4 py-3">Approval status</th>
+                            <th className="px-4 py-3 text-right">Milestone total</th>
+                            <th className="px-4 py-3 text-right">Action</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-slate-100">
+                          {projectMilestones.map(milestone => {
+                            const payout = projectPayoutRows.find(row => row.milestone_id === milestone.id);
+                            const fundingTransaction = getFundingTransaction(
+                              projectTransferViewId,
+                              milestone.id,
+                              transferProjectTransactions
+                            );
+                            const canTransfer = milestone.status === 'approved' && !payout && Boolean(fundingTransaction);
+                            return (
+                              <tr key={milestone.id}>
+                                <td className="px-4 py-3 font-semibold text-slate-800">
+                                  Milestone {milestone.seq}: {milestone.name}
+                                </td>
+                                <td className="px-4 py-3 text-slate-600">
+                                  {payout ? 'Transferred' : removeUnderscore(milestone.status)}
+                                </td>
+                                <td className="px-4 py-3 text-right font-mono font-bold text-slate-900">
+                                  ₱{milestone.amount.toLocaleString('en-US', { maximumFractionDigits: 2 })}
+                                </td>
+                                <td className="px-4 py-3 text-right">
+                                  {canTransfer ? (
+                                    <button
+                                      type="button"
+                                      onClick={() => openTransferModal(projectTransferViewId, milestone)}
+                                      className="inline-flex items-center gap-1 rounded-lg bg-blue-600 px-2.5 py-1.5 font-bold text-white transition hover:bg-blue-700"
+                                    >
+                                      <ArrowUpRight className="h-3.5 w-3.5" />
+                                      Transfer milestone
+                                    </button>
+                                  ) : (
+                                    <span className="text-[10px] font-semibold text-slate-400">
+                                      {payout
+                                        ? 'Already transferred'
+                                        : milestone.status === 'approved'
+                                        ? 'Awaiting verified funds'
+                                        : 'Awaiting approval'}
+                                    </span>
+                                  )}
+                                </td>
+                              </tr>
+                            );
+                          })}
+                        </tbody>
+                      </table>
+                    </div>
+                  )}
+                </section>
+
+              </div>
+            </div>
+          </div>
+        );
+      })()}
 
       {/* MODAL 1: CONFIRM RECEIVED FUNDS INTO SAFEKEEPING */}
       {reviewingTx && (
@@ -995,10 +1275,16 @@ export default function AdminTransactionsPage() {
                     inputMode="decimal"
                     value={formatNumberInput(transferAmount)}
                     onChange={(e) => setTransferAmount(formatNumberInput(e.target.value))}
+                    readOnly={Boolean(transferringMilestoneId)}
                     className="w-full pl-8 pr-3 py-2 rounded-xl border border-slate-200 text-sm font-bold font-mono focus:ring-2 focus:ring-blue-500 focus:outline-none"
                     placeholder="0.00"
                   />
                 </div>
+                {transferringMilestoneId && (
+                  <p className="text-[10px] text-slate-500">
+                    This transfer is for the full approved milestone amount and can only be recorded once.
+                  </p>
+                )}
               </div>
 
               <div className="space-y-1">
@@ -1024,7 +1310,6 @@ export default function AdminTransactionsPage() {
                             {removeUnderscore(account.payout_method)}
                             {account.bank_name ? ` — ${account.bank_name}` : ''}
                             {account.is_primary ? ' (Primary)' : ''}
-                            {account.status !== 'VERIFIED' ? ` — ${removeUnderscore(account.status)}` : ''}
                           </option>
                         ))}
                       </select>
@@ -1037,9 +1322,6 @@ export default function AdminTransactionsPage() {
                         </div>
                         <div className="mt-1">{selectedPayoutAccount.account_name}</div>
                         <div className="font-mono">{selectedPayoutAccount.account_number_mask}</div>
-                        <div className="mt-1 text-[10px] text-slate-500">
-                          Account status: {removeUnderscore(selectedPayoutAccount.status)}
-                        </div>
                       </div>
                     )}
                   </>
@@ -1125,7 +1407,7 @@ export default function AdminTransactionsPage() {
               </button>
               <button
                 type="button"
-                disabled={isTransferring}
+                disabled={isTransferring || payoutAccountsLoading || Boolean(payoutAccountsError)}
                 onClick={handleExecuteContractorPayout}
                 className="px-5 py-2 rounded-xl bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white font-bold text-xs shadow-md transition flex items-center gap-1.5"
               >

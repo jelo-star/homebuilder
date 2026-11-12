@@ -30,7 +30,7 @@ function cleanMilestoneTitle(name: string | null | undefined): string {
 export default function MilestoneReleasesPage() {
   const [loading, setLoading] = React.useState(true);
   const [milestones, setMilestones] = React.useState<(Milestone & { projects?: Project })[]>([]);
-  const [filter, setFilter] = React.useState<MilestoneStatus | 'all'>('proof_submitted');
+  const [filter, setFilter] = React.useState<MilestoneStatus | 'all'>('approved');
   const [actionLoading, setActionLoading] = React.useState<string | null>(null);
   const [successMsg, setSuccessMsg] = React.useState('');
   const [error, setError] = React.useState<string | null>(null);
@@ -66,44 +66,13 @@ export default function MilestoneReleasesPage() {
     const supabase = createClient();
 
     try {
-      const { data: { user } } = await supabase.auth.getUser();
-
-      // 1. Mark milestone as paid
-      const { error: updateError } = await supabase
-        .from('milestones')
-        .update({
-          status: 'paid',
-          paid_at: new Date().toISOString()
-        })
-        .eq('id', milestone.id);
-      if (updateError) throw updateError;
-
-      // 2. Append release ledger entry
-      const { error: ledgerError } = await supabase.from('escrow_ledger').insert({
-        project_id: milestone.project_id,
-        milestone_id: milestone.id,
-        entry_type: 'release',
-        amount: milestone.amount,
-        note: `Admin authorized contractor payout: ${milestone.name}`
+      const { error: releaseError } = await supabase.rpc('admin_release_approved_milestone', {
+        p_milestone_id: milestone.id,
       });
-      if (ledgerError) throw ledgerError;
-
-      // 3. Audit log
-      const { error: auditError } = await supabase.from('audit_log').insert({
-        actor_id: user?.id,
-        action: 'authorize_milestone_payment_release',
-        entity: 'milestone',
-        entity_id: milestone.id,
-        details: {
-          contractor_amount: milestone.amount,
-          homeowner_total_amount: milestone.homeowner_total_amount ?? milestone.amount,
-          milestone_name: milestone.name
-        }
-      });
-      if (auditError) throw auditError;
+      if (releaseError) throw releaseError;
 
       setSuccessMsg(
-        `Contractor payout of ${formatCurrency(milestone.amount)} authorized.`
+        `Verified escrow release of ${formatCurrency(milestone.amount)} authorized.`
       );
       await loadData();
     } catch (err: unknown) {
@@ -123,7 +92,7 @@ export default function MilestoneReleasesPage() {
       userRole="admin"
       userName="Platform Administrator"
       title="Milestone Releases & Approvals"
-      subtitle="Verify submitted photographic proof, inspect completion criteria, and authorize escrow disbursement"
+      subtitle="Review homeowner-approved milestones and authorize releases only from verified escrow"
       showBackButton={false}
     >
       <div className="w-full space-y-6">
@@ -148,7 +117,7 @@ export default function MilestoneReleasesPage() {
 
         {/* Status Filters */}
         <div className="flex gap-2">
-          {(['proof_submitted', 'approved', 'paid', 'disputed', 'all'] as const).map((status) => (
+          {(['approved', 'proof_submitted', 'paid', 'disputed', 'all'] as const).map((status) => (
             <button
               key={status}
               onClick={() => setFilter(status)}
@@ -192,6 +161,8 @@ export default function MilestoneReleasesPage() {
                       <span className={`px-2 py-0.5 rounded text-[10px] font-semibold uppercase ${
                         m.status === 'paid'
                           ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
+                          : m.status === 'approved'
+                          ? 'bg-indigo-50 text-indigo-700 border border-indigo-200'
                           : m.status === 'proof_submitted'
                           ? 'bg-blue-50 text-blue-700 border border-blue-200'
                           : m.status === 'disputed'
@@ -221,7 +192,7 @@ export default function MilestoneReleasesPage() {
                       <div className="text-sm font-bold text-slate-900">{formatCurrency(m.amount)}</div>
                     </div>
 
-                    {m.status === 'proof_submitted' && (
+                    {m.status === 'approved' && (
                       <button
                         onClick={() => handleAuthorizeRelease(m)}
                         disabled={actionLoading === m.id}
@@ -230,6 +201,9 @@ export default function MilestoneReleasesPage() {
                         <ShieldCheck className="w-3.5 h-3.5" />
                         Authorize Release
                       </button>
+                    )}
+                    {m.status === 'proof_submitted' && (
+                      <span className="text-[11px] font-medium text-slate-400">Awaiting homeowner approval</span>
                     )}
                   </div>
                 </div>

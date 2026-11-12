@@ -17,14 +17,11 @@ import {
   Send,
   Calendar,
   DollarSign,
-  MessageSquare,
   Clock,
   Sparkles,
   Info,
   Check,
-  ChevronRight,
-  User,
-  HardHat
+  ChevronRight
 } from 'lucide-react';
 import { createClient } from '@/lib/supabase/client';
 import {
@@ -36,7 +33,7 @@ import {
   ProjectPlanComment,
   Milestone
 } from '@/types/database';
-import { formatCurrency, formatDate, formatNumberInput, parseNumberInput, capitalize } from '@/lib/utils/formatters';
+import { formatCurrency, formatNumberInput, parseNumberInput, capitalize } from '@/lib/utils/formatters';
 
 export interface PlanMilestoneRow {
   id: string;
@@ -967,70 +964,56 @@ function ContractorProjectPlanContent() {
             </div>
 
             {/* Discussion & Comments Section */}
-            <div className="bg-white rounded-2xl border border-slate-200 shadow-xs p-6 space-y-4">
-              <div className="flex items-center justify-between border-b border-slate-100 pb-3">
-                <div className="flex items-center gap-2">
-                  <MessageSquare className="w-5 h-5 text-blue-600" />
-                  <h3 className="text-sm font-bold text-slate-900">Project Plan Comments & Discussion</h3>
-                </div>
-                <span className="text-xs text-slate-400">{comments.length} Messages</span>
+            <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-xs sm:p-6">
+              <div className="border-b border-slate-200 pb-3">
+                <h3 className="text-sm font-bold text-slate-900">Plan Discussion &amp; Feedback</h3>
+                <p className="mt-1 text-xs text-slate-500">Messages about the schedule and proposed work stages.</p>
               </div>
 
-              {/* Messages History */}
-              <div className="space-y-3 max-h-[360px] overflow-y-auto pr-1">
+              <div className="mt-4 max-h-56 min-h-36 space-y-3 overflow-y-auto rounded-xl bg-slate-50 p-3">
                 {comments.length === 0 ? (
-                  <div className="p-6 text-center text-xs text-slate-400 bg-slate-50 rounded-xl">
-                    No comments yet. Start a discussion with the homeowner regarding milestones, dates, or scope.
-                  </div>
+                  <p className="text-[11px] italic text-slate-400">No comments yet. Start a discussion with the homeowner about the plan.</p>
                 ) : (
                   comments.map(c => {
-                    const isContractor = c.author_role === 'contractor';
+                    const isHomeowner = c.author_role === 'homeowner';
                     return (
-                      <div
-                        key={c.id}
-                        className={`p-3.5 rounded-xl border text-xs leading-relaxed ${
-                          isContractor
-                            ? 'bg-blue-50/60 border-blue-200/80 mr-4'
-                            : 'bg-emerald-50/60 border-emerald-200/80 ml-4'
-                        }`}
-                      >
-                        <div className="flex items-center justify-between gap-2 mb-1">
-                          <span className="font-bold text-slate-900 flex items-center gap-1.5">
-                            {isContractor ? <HardHat className="w-3.5 h-3.5 text-blue-600" /> : <User className="w-3.5 h-3.5 text-[#136F48]" />}
-                            <span>{c.author_name}</span>
-                            <span className="text-[10px] font-semibold text-slate-400 uppercase capitalize">
-                              ({c.author_role})
-                            </span>
-                          </span>
-                          <span className="text-[10px] text-slate-400">
-                            {formatDate(c.created_at)}
-                          </span>
+                      <div key={c.id} className={`flex ${isHomeowner ? 'justify-end' : 'justify-start'}`}>
+                        <div className={`max-w-[85%] rounded-2xl px-3.5 py-2.5 text-xs leading-relaxed shadow-xs ${
+                          isHomeowner
+                            ? 'rounded-br-md bg-emerald-700 text-white'
+                            : 'rounded-bl-md border border-slate-200 bg-white text-slate-800'
+                        }`}>
+                          <div className={`mb-1 flex items-center justify-between gap-4 text-[10px] ${
+                            isHomeowner ? 'text-emerald-100' : 'text-slate-500'
+                          }`}>
+                            <strong className="font-semibold">{c.author_name}</strong>
+                            <time dateTime={c.created_at}>
+                              {new Date(c.created_at).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}
+                            </time>
+                          </div>
+                          <p className="whitespace-pre-wrap break-words">{c.message}</p>
                         </div>
-                        <p className="text-slate-700 whitespace-pre-wrap">{c.message}</p>
                       </div>
                     );
                   })
                 )}
               </div>
 
-              {/* Comment Input Box */}
-              <form onSubmit={handleSendComment} className="pt-2">
-                <div className="flex gap-2">
+              <form onSubmit={handleSendComment} className="mt-3 flex gap-2">
                   <input
                     type="text"
                     value={newCommentText}
                     onChange={e => setNewCommentText(e.target.value)}
-                    placeholder="Write a comment or suggest a milestone timeline adjustment..."
-                    className="flex-1 px-3.5 py-2 rounded-xl border border-slate-200 text-xs text-slate-800 placeholder-slate-400 focus:border-[#136F48] focus:ring-1 focus:ring-[#136F48] outline-hidden bg-white"
+                    placeholder="Message your homeowner about the plan..."
+                    className="min-w-0 flex-1 rounded-xl border border-slate-300 bg-white px-3 py-2.5 text-xs text-slate-800 placeholder-slate-400 outline-hidden focus:border-[#136F48] focus:ring-1 focus:ring-[#136F48]"
                   />
                   <button
                     type="submit"
                     disabled={submittingComment || !newCommentText.trim()}
-                    className="px-4 py-2 rounded-xl bg-slate-900 hover:bg-slate-800 disabled:opacity-40 text-white text-xs font-bold transition-colors shrink-0"
+                    className="shrink-0 rounded-xl bg-[#136F48] px-4 py-2.5 text-xs font-bold text-white transition-colors hover:bg-[#0f5939] disabled:cursor-not-allowed disabled:bg-slate-400"
                   >
-                    {submittingComment ? 'Posting...' : 'Comment'}
+                    {submittingComment ? 'Sending...' : 'Send'}
                   </button>
-                </div>
               </form>
             </div>
           </div>

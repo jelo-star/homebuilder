@@ -21,6 +21,7 @@ import {
   X
 } from 'lucide-react';
 import { createClient } from '@/lib/supabase/client';
+import { optimizeImage } from '@/lib/image-optimization';
 import { ContractorProfile, ContractorDocument, DocType } from '@/types/database';
 import { capitalize, formatDate } from '@/lib/utils/formatters';
 
@@ -161,11 +162,12 @@ export default function VerificationPage() {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) throw new Error('Sign in to submit a verification document.');
 
-      const fileExt = uploadFile.name.split('.').pop();
+      const documentFile = uploadFile.type.startsWith('image/') ? await optimizeImage(uploadFile, 'portfolio') : uploadFile;
+      const fileExt = documentFile.name.split('.').pop();
       const storagePath = `${user.id}/${Date.now()}_${docType}.${fileExt}`;
       const { error: uploadErr } = await supabase.storage
         .from('contractor-docs')
-        .upload(storagePath, uploadFile, { upsert: true });
+        .upload(storagePath, documentFile, { contentType: documentFile.type, upsert: true });
       if (uploadErr) {
         if (uploadErr.message.toLowerCase().includes('bucket not found')) {
           throw new Error('Document storage is not initialized. Run Supabase migration 76_restore_contractor_document_storage.sql, then retry the upload.');

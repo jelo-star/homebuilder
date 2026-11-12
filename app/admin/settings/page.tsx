@@ -10,6 +10,7 @@ import {
   Globe
 } from 'lucide-react';
 import { createClient } from '@/lib/supabase/client';
+import { optimizeImage } from '@/lib/image-optimization';
 import { ImagePlus, Pencil, Plus, Trash2, Upload, X } from 'lucide-react';
 
 type PopularService = {
@@ -221,15 +222,11 @@ export default function PlatformSettingsPage() {
         if (authError) throw authError;
         if (!user) throw new Error('Sign in as an administrator to upload a service photo.');
 
-        const extensionByType: Record<string, string> = {
-          'image/jpeg': 'jpg',
-          'image/png': 'png',
-          'image/webp': 'webp',
-        };
-        const storagePath = `${user.id}/${crypto.randomUUID()}.${extensionByType[serviceImageFile.type]}`;
+        const optimizedServiceImage = await optimizeImage(serviceImageFile, 'portfolio');
+        const storagePath = `${user.id}/${crypto.randomUUID()}.webp`;
         const { error: uploadError } = await supabase.storage
           .from('popular-services')
-          .upload(storagePath, serviceImageFile, { contentType: serviceImageFile.type, upsert: false });
+          .upload(storagePath, optimizedServiceImage, { contentType: 'image/webp', upsert: false });
         if (uploadError) throw uploadError;
 
         imageUrl = supabase.storage.from('popular-services').getPublicUrl(storagePath).data.publicUrl;

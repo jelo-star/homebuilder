@@ -323,8 +323,8 @@ function QuoteDetailContent() {
                         <td className="py-2.5 px-3 text-center text-slate-400 font-mono text-[11px]">{idx + 1}</td>
                         <td className="py-2.5 px-3 font-semibold text-slate-900">{it.item_name}</td>
                         <td className="py-2.5 px-3 text-slate-500 text-[11px]">{it.brand_spec || '—'}</td>
-                        <td className="py-2.5 px-3 text-right font-mono font-medium">{it.quantity}</td>
-                        <td className="py-2.5 px-3 text-slate-500">{it.unit}</td>
+                        <td className="py-2.5 px-3 text-right font-mono font-medium">{it.quantity || '-'}</td>
+                        <td className="py-2.5 px-3 text-slate-500">{it.unit?.trim() || '-'}</td>
                         <td className="py-2.5 px-3 text-right font-mono text-slate-700">{formatCurrency(it.unit_price)}</td>
                         <td className="py-2.5 px-3 text-right font-mono font-bold text-slate-900">
                           {formatCurrency(Number(it.quantity) * (Number(it.unit_price) || 0))}
