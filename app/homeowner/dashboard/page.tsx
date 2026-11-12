@@ -254,7 +254,14 @@ export default function HomeownerDashboard() {
   const pendingPlanCount = plans.filter(plan => plan.status === 'submitted' || plan.status === 'revision_requested').length;
   const pendingActions = pendingQuotationCount + pendingMilestoneCount + pendingPlanCount;
   const planByProjectId = new Map(plans.map(plan => [plan.project_id, plan]));
-  const visibleProjects = projects.slice(0, 3);
+  const visibleProjects = [...projects]
+    .sort((a, b) => {
+      const aComplete = isProjectComplete(a, milestonesByProjectId.get(a.id) || []);
+      const bComplete = isProjectComplete(b, milestonesByProjectId.get(b.id) || []);
+      if (aComplete !== bComplete) return aComplete ? 1 : -1;
+      return b.updated_at.localeCompare(a.updated_at);
+    })
+    .slice(0, 3);
   const displayName = profile?.full_name?.trim() || 'Homeowner';
 
   return (

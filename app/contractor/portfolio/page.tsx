@@ -1,6 +1,7 @@
 'use client';
 
 import React from 'react';
+import Link from 'next/link';
 import AppLayout from '@/components/ui/AppLayout';
 import { 
   Building2, 
@@ -18,7 +19,9 @@ import {
 import { createClient } from '@/lib/supabase/client';
 import { resolvePortfolioImageUrl } from '@/lib/supabase/storage';
 import { optimizeImage } from '@/lib/image-optimization';
-import { PortfolioItem, HouseType } from '@/types/database';
+import { PortfolioItem, HouseType, MilestoneStatus, Project, Quote } from '@/types/database';
+
+type CompletedContractProject = Pick<Project, 'id' | 'title' | 'city' | 'province' | 'updated_at'>;
 
 export default function ContractorPortfolioPage() {
   return (
@@ -32,6 +35,7 @@ function ContractorPortfolioContent() {
   const [loading, setLoading] = React.useState(true);
   const [loadError, setLoadError] = React.useState('');
   const [portfolioItems, setPortfolioItems] = React.useState<PortfolioItem[]>([]);
+  const [completedProjects, setCompletedProjects] = React.useState<CompletedContractProject[]>([]);
   const [showAddModal, setShowAddModal] = React.useState(false);
   const [editingItemId, setEditingItemId] = React.useState<string | null>(null);
 
@@ -98,20 +102,80 @@ function ContractorPortfolioContent() {
 
     let dbItems: PortfolioItem[] = [];
     if (user) {
-      const { data, error } = await supabase
-        .from('portfolio_items')
-        .select('*, portfolio_images(*)')
-        .eq('contractor_id', user.id)
-        .order('created_at', { ascending: false });
+      const [portfolioResult, quotesResult] = await Promise.all([
+        supabase
+          .from('portfolio_items')
+          .select('*, portfolio_images(*)')
+          .eq('contractor_id', user.id)
+          .order('created_at', { ascending: false }),
+        supabase
+          .from('quotes')
+          .select('id, project_id, status')
+          .eq('contractor_id', user.id),
+      ]);
 
-      if (error) {
-        setLoadError(error.message);
+      if (portfolioResult.error || quotesResult.error) {
+        setLoadError(portfolioResult.error?.message || quotesResult.error?.message || 'Completed projects could not be loaded.');
         setLoading(false);
         return;
       }
-      if (data) {
-        dbItems = data as PortfolioItem[];
+
+      if (portfolioResult.data) {
+        dbItems = portfolioResult.data as PortfolioItem[];
       }
+
+      const quotes = (quotesResult.data || []) as Pick<Quote, 'id' | 'project_id' | 'status'>[];
+      const ownedQuoteIds = new Set(quotes.map(quote => quote.id));
+      const acceptedProjectIds = new Set(quotes.filter(quote => quote.status === 'accepted').map(quote => quote.project_id));
+      const quotedProjectIds = Array.from(new Set(quotes.map(quote => quote.project_id)));
+      const projectsResult = quotedProjectIds.length
+        ? await supabase
+          .from('projects')
+          .select('id, title, status, city, province, updated_at, awarded_quote_id')
+          .in('id', quotedProjectIds)
+        : { data: [], error: null };
+      if (projectsResult.error) {
+        setLoadError(projectsResult.error.message);
+        setLoading(false);
+        return;
+      }
+
+      const awardedProjects = (projectsResult.data || []).filter(project =>
+        (project.awarded_quote_id && ownedQuoteIds.has(project.awarded_quote_id))
+        || acceptedProjectIds.has(project.id)
+      );
+      const awardedProjectIds = awardedProjects.map(project => project.id);
+      const milestonesResult = awardedProjectIds.length
+        ? await supabase
+          .from('milestones')
+          .select('project_id, status')
+          .in('project_id', awardedProjectIds)
+        : { data: [], error: null };
+      if (milestonesResult.error) {
+        setLoadError(milestonesResult.error.message);
+        setLoading(false);
+        return;
+      }
+
+      const milestoneStatusesByProject = new Map<string, MilestoneStatus[]>();
+      for (const milestone of (milestonesResult.data || []) as { project_id: string; status: MilestoneStatus }[]) {
+        const statuses = milestoneStatusesByProject.get(milestone.project_id) || [];
+        statuses.push(milestone.status);
+        milestoneStatusesByProject.set(milestone.project_id, statuses);
+      }
+      setCompletedProjects(awardedProjects
+        .filter(project => {
+          const statuses = milestoneStatusesByProject.get(project.id) || [];
+          return project.status === 'completed'
+            || (statuses.length > 0 && statuses.every(status => status === 'approved' || status === 'paid'));
+        })
+        .map(project => ({
+          id: project.id,
+          title: project.title,
+          city: project.city,
+          province: project.province,
+          updated_at: project.updated_at,
+        })));
     }
     setPortfolioItems(dbItems);
     setLoading(false);
@@ -303,6 +367,40 @@ function ContractorPortfolioContent() {
             </button>
           </div>
         </section>
+
+        {completedProjects.length > 0 && (
+          <section className="space-y-4">
+            <div className="flex flex-col gap-1 px-1 sm:flex-row sm:items-end sm:justify-between">
+              <div>
+                <h2 className="text-lg font-bold text-slate-900">Completed HomeBuildr Projects</h2>
+                <p className="mt-1 text-xs text-slate-500">Completed awarded projects are automatically shown here and removed from your active dashboard.</p>
+              </div>
+              <span className="text-xs font-semibold text-slate-400">
+                {completedProjects.length} completed {completedProjects.length === 1 ? 'project' : 'projects'}
+              </span>
+            </div>
+            <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
+              {completedProjects.map(project => (
+                <Link
+                  key={project.id}
+                  href={`/contractor/projects/${project.id}`}
+                  className="flex items-center justify-between gap-4 rounded-2xl border border-emerald-100 bg-white p-5 shadow-xs transition hover:border-emerald-300 hover:shadow-sm"
+                >
+                  <div className="min-w-0">
+                    <h3 className="truncate text-sm font-bold text-slate-900">{project.title}</h3>
+                    <p className="mt-1 truncate text-xs text-slate-500">
+                      {[project.city, project.province].filter(Boolean).join(', ') || 'Location not provided'}
+                    </p>
+                  </div>
+                  <span className="inline-flex shrink-0 items-center gap-1 rounded-full bg-emerald-50 px-2.5 py-1 text-[10px] font-bold text-emerald-700">
+                    <CheckCircle2 className="h-3 w-3" />
+                    Completed
+                  </span>
+                </Link>
+              ))}
+            </div>
+          </section>
+        )}
 
         <div className="flex flex-col gap-1 px-1 sm:flex-row sm:items-end sm:justify-between">
           <div>

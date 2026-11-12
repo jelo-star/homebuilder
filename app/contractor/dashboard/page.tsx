@@ -37,13 +37,15 @@ function formatProjectLocation(city?: string | null, province?: string | null): 
 }
 
 function getProjectDisplayStatus(status: string, milestoneStatuses: MilestoneStatus[]): 'Planning' | 'In Progress' | 'Complete' {
-  if (milestoneStatuses.length === 0) return 'Planning';
   if (
     status === 'completed' ||
-    milestoneStatuses.every(milestoneStatus => milestoneStatus === 'paid')
+    (milestoneStatuses.length > 0 && milestoneStatuses.every(
+      milestoneStatus => milestoneStatus === 'approved' || milestoneStatus === 'paid',
+    ))
   ) {
     return 'Complete';
   }
+  if (milestoneStatuses.length === 0) return 'Planning';
   return 'In Progress';
 }
 
@@ -159,7 +161,7 @@ export default function ContractorDashboard() {
         milestoneStatusesByProjectId.set(milestone.project_id, statuses);
       }
 
-      const enrichedActive: EnrichedActiveProject[] = activeList.map(p => {
+      const enrichedAwarded: EnrichedActiveProject[] = activeList.map(p => {
         const matchingQuote = (p.awarded_quote_id
           ? quotes.find(quote => quote.id === p.awarded_quote_id)
           : null) || acceptedQuoteByProject.get(p.id) || quoteByProject.get(p.id);
@@ -175,10 +177,11 @@ export default function ContractorDashboard() {
           full_location: formatProjectLocation(p.city, p.province),
         };
       });
+      const enrichedActive = enrichedAwarded.filter(project => project.display_status !== 'Complete');
 
       // SECTION 2: Unawarded Projects
       // Projects that are still accepting quotations, under homeowner review, or awaiting contractor selection
-      const activeProjectIds = new Set(enrichedActive.map(p => p.id));
+      const activeProjectIds = new Set(awardedRaw.map(p => p.id));
       const unawardedRaw = allProjects.filter(p => !activeProjectIds.has(p.id) && !['completed', 'cancelled'].includes(p.status));
 
       const enrichedUnawarded: EnrichedUnawardedProject[] = unawardedRaw.map(p => {
