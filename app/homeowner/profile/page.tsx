@@ -358,7 +358,7 @@ export default function HomeownerProfilePage() {
             </div>
             <div>
               <h3 className="text-base font-bold text-slate-900">Account Security</h3>
-              <p className="text-xs text-slate-500">Update the password you use to sign in to HomeBuilder.</p>
+              <p className="text-xs text-slate-500">Update the password you use to sign in to Gawa-Yad.</p>
             </div>
           </div>
 

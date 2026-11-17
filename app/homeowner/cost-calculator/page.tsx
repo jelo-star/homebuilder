@@ -666,6 +666,12 @@ export default function CostCalculatorPage() {
                       <div>
                         <div className="text-xs font-bold text-slate-900">{cat.name}</div>
                         <div className="text-[11px] text-slate-500 hidden sm:block">{cat.description}</div>
+                        <div className="mt-1.5 h-1.5 w-48 sm:w-64 overflow-hidden rounded-full bg-slate-100">
+                          <div
+                            className="h-full rounded-full bg-blue-600"
+                            style={{ width: `${Math.min(100, Math.max(cat.percent * 2.5, 5))}%` }}
+                          />
+                        </div>
                       </div>
                     </div>
 

@@ -93,7 +93,7 @@ function AppLayoutContent({
 
   React.useEffect(() => {
     let active = true;
-    const cacheKey = `homebuildr-profile-${userRole}`;
+    const cacheKey = `gawa-yad-profile-${userRole}`;
     try {
       const cached = JSON.parse(window.localStorage.getItem(cacheKey) || 'null') as {
         name?: string;
@@ -289,7 +289,7 @@ function AppLayoutContent({
             <Menu className="w-5 h-5" />
           </button>
           <Link href={dashboardHomeHref} className="flex items-center gap-2">
-            <BrandLogo className="h-8 w-auto" />
+            <BrandLogo className="transition-transform duration-200" />
           </Link>
         </div>
 
@@ -315,7 +315,7 @@ function AppLayoutContent({
           {/* Brand Header */}
           <div className="h-16 px-5 border-b border-slate-100/90 flex items-center justify-between shrink-0">
             <Link href={dashboardHomeHref} className="flex items-center gap-2.5 group">
-              <BrandLogo className="h-10 w-auto transition-transform duration-200 group-hover:scale-105" />
+              <BrandLogo className="transition-transform duration-200 group-hover:scale-105" />
             </Link>
 
             <button

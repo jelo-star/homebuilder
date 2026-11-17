@@ -125,10 +125,10 @@ export default function RegisterPage() {
           <div className="rounded-[1.4rem] border border-white/90 bg-white/95 p-5 shadow-2xl shadow-slate-950/20 ring-1 ring-slate-900/5 backdrop-blur-xl sm:p-7 lg:p-6">
             <div className="mb-4">
               <div className="mb-2 flex items-center gap-3 text-xs font-extrabold uppercase tracking-[0.16em] text-emerald-700">
-                Join HomeBuildr <span className="h-px w-12 bg-emerald-300" />
+                Join Gawa-Yad <span className="h-px w-12 bg-emerald-300" />
               </div>
               <h2 className="text-2xl font-extrabold tracking-tight text-slate-950 sm:text-3xl">Create your account</h2>
-              <p className="mt-1 text-sm leading-5 text-slate-500">Choose how you’ll use HomeBuildr and set up your account.</p>
+              <p className="mt-1 text-sm leading-5 text-slate-500">Choose how you’ll use Gawa-Yad and set up your account.</p>
             </div>
         {errorMsg && (
           <div role="alert" className="fixed right-4 top-4 z-[99999] w-[calc(100%-2rem)] max-w-sm animate-in fade-in slide-in-from-top-2 duration-200">

@@ -81,6 +81,7 @@ export default function HomePage() {
   const router = useRouter();
   const [service, setService] = React.useState('all');
   const [location, setLocation] = React.useState('');
+  const [radius, setRadius] = React.useState('10 km');
   const [contractors, setContractors] = React.useState<FeaturedContractor[]>([]);
   const [contractorsLoading, setContractorsLoading] = React.useState(true);
   const [contractorsError, setContractorsError] = React.useState('');
@@ -212,6 +213,7 @@ export default function HomePage() {
     const query = new URLSearchParams();
     if (service !== 'all') query.set('service', service);
     if (location.trim()) query.set('location', location.trim());
+    if (radius) query.set('radius', radius.replace(' km', ''));
     router.push(`/contractors${query.size ? `?${query.toString()}` : ''}`);
   };
 
@@ -278,8 +280,15 @@ export default function HomePage() {
               <div className="mt-4 flex items-center gap-2 text-[10px] text-slate-600">
                 <MapPin className="h-3.5 w-3.5 text-slate-500" />
                 <span>Search within:</span>
-                {['10 km', '25 km', '50 km'].map((distance, index) => (
-                  <span key={distance} className={`rounded-md px-2 py-1 ${index === 0 ? 'bg-[#dff2e9] font-semibold text-[#136f48]' : 'bg-white/70'}`}>{distance}</span>
+                {['10 km', '25 km', '50 km'].map((distance) => (
+                  <button
+                    key={distance}
+                    type="button"
+                    onClick={() => setRadius(distance)}
+                    className={`rounded-md px-2 py-1 transition ${radius === distance ? 'bg-[#dff2e9] font-semibold text-[#136f48]' : 'bg-white/70 hover:bg-white'}`}
+                  >
+                    {distance}
+                  </button>
                 ))}
               </div>
             </div>
@@ -448,7 +457,7 @@ export default function HomePage() {
         <section className="bg-[#f4f7f4] px-4 py-12 sm:px-6 lg:px-8">
           <div className="mx-auto max-w-[1320px]">
             <div className="text-center">
-              <h2 className="text-[2.4rem] font-extrabold leading-tight tracking-[-0.06em] text-slate-900">Why homeowners choose HomeBuilder</h2>
+              <h2 className="text-[2.4rem] font-extrabold leading-tight tracking-[-0.06em] text-slate-900">Why homeowners choose Gawa-Yad</h2>
             </div>
 
             <div className="mt-8 grid gap-5 md:grid-cols-3">
@@ -490,7 +499,8 @@ export default function HomePage() {
       <footer className="bg-[#0f172a] px-4 py-8 text-slate-200 sm:px-6 lg:px-8">
         <div className="mx-auto flex max-w-[1320px] flex-col gap-6 md:flex-row md:items-center md:justify-between">
           <div>
-            <p className="text-[1.6rem] font-extrabold tracking-[-0.05em] text-white">HomeBuilder</p>
+            <p className="text-[1.6rem] font-extrabold tracking-[-0.05em] text-white">Gawa-Yad</p>
+            <p className="mt-1 text-xs font-medium italic tracking-wide text-emerald-400">Gawang tapat, gawang bayad</p>
             <p className="mt-2 text-sm text-slate-300">New builds, renovations and trusted local experts for every stage of your project.</p>
           </div>
 

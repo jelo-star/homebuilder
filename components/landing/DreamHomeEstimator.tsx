@@ -58,9 +58,9 @@ function getFinishOptions(workType: WorkType, houseType: HouseType): { value: Fi
     return houseType === 'one_storey'
       ? [{ value: 'basic', label: 'Basic' }]
       : [
-          { value: 'standard', label: 'Standard' },
-          { value: 'premium', label: 'Premium' },
-        ];
+        { value: 'standard', label: 'Standard' },
+        { value: 'premium', label: 'Premium' },
+      ];
   }
   return [
     { value: 'basic', label: 'Basic' },
@@ -152,11 +152,11 @@ export default function DreamHomeEstimator() {
   const highTotals = estimate ? getTotals(estimate.costHigh, estimate) : null;
   const breakdown = baseTotals
     ? [
-        { label: 'Direct construction cost', value: baseTotals.direct, detail: 'Benchmark cost for the selected home and floor area' },
-        { label: 'Contractor overhead & profit', value: baseTotals.overhead, detail: `${estimate?.overheadProfitPct}% of direct construction cost` },
-        { label: 'Contingency', value: baseTotals.contingency, detail: `${estimate?.contingencyPct}% provision for unforeseen costs` },
-        { label: 'VAT', value: baseTotals.vat, detail: `${estimate?.vatPct}% applied to construction cost and overhead` },
-      ]
+      { label: 'Direct construction cost', value: baseTotals.direct, detail: 'Benchmark cost for the selected home and floor area' },
+      { label: 'Contractor overhead & profit', value: baseTotals.overhead, detail: `${estimate?.overheadProfitPct}% of direct construction cost` },
+      { label: 'Contingency', value: baseTotals.contingency, detail: `${estimate?.contingencyPct}% provision for unforeseen costs` },
+      { label: 'VAT', value: baseTotals.vat, detail: `${estimate?.vatPct}% applied to construction cost and overhead` },
+    ]
     : [];
 
   return (
@@ -285,50 +285,77 @@ export default function DreamHomeEstimator() {
                   </span>
                 </div>
 
-                <h3 className="mt-5 text-sm font-bold text-slate-900">Estimated cost breakdown</h3>
-                <div className="mt-3 divide-y divide-slate-100">
-                  {breakdown.map((item) => (
-                    <div key={item.label} className="flex items-start justify-between gap-4 py-3">
-                      <div>
-                        <p className="text-sm font-semibold text-slate-800">{item.label}</p>
-                        <p className="mt-0.5 text-xs text-slate-500">{item.detail}</p>
+                        <div className="mt-5 flex items-center justify-between border-b border-slate-100 pb-2">
+                          <h3 className="text-sm font-bold uppercase tracking-wider text-slate-700">Detailed Cost Breakdown</h3>
+                          <span className="text-xs font-semibold text-slate-500">Benchmark Distribution</span>
+                        </div>
+                        <div className="mt-2 divide-y divide-slate-100">
+                          {estimate.categoryBreakdown && estimate.categoryBreakdown.length > 0 ? (
+                            estimate.categoryBreakdown.map((item) => (
+                      <div key={item.id} className="py-2.5">
+                        <div className="flex items-start justify-between gap-2">
+                          <div>
+                            <p className="text-xs font-bold text-slate-800">{item.name}</p>
+                            <p className="text-[11px] text-slate-400">{item.description}</p>
+                          </div>
+                          <div className="text-right shrink-0">
+                            <p className="text-xs font-bold text-slate-900">{formatCurrency(item.amount)}</p>
+                            <span className="text-[10px] text-slate-400">{item.percent}%</span>
+                          </div>
+                        </div>
+                        {/* Visual Progress Bar */}
+                        <div className="mt-1.5 h-1.5 w-full overflow-hidden rounded-full bg-slate-100">
+                          <div
+                            className="h-full rounded-full bg-[#136F48]"
+                            style={{ width: `${Math.min(100, Math.max(item.percent * 2.5, 4))}%` }}
+                          />
+                        </div>
                       </div>
-                      <p className="shrink-0 text-sm font-bold text-slate-900">{formatCurrency(item.value)}</p>
-                    </div>
-                  ))}
-                </div>
-                <p className="mt-4 text-xs leading-relaxed text-slate-500">
-                  Benchmark: {estimate.benchmarkSource} ({estimate.benchmarkVersion}). This is a preliminary estimate; final pricing depends on plans, materials, site conditions, and contractor quotes.
-                </p>
-              </>
-            ) : error ? (
-              <div role="alert" className="flex min-h-[250px] items-center justify-center text-center text-sm font-medium leading-relaxed text-rose-700">
-                {error}
-              </div>
-            ) : (
-              <div className="flex min-h-[250px] flex-col items-center justify-center text-center">
-                <span className="flex h-12 w-12 items-center justify-center rounded-full bg-emerald-50 text-[#136F48]">
-                  <Calculator className="h-6 w-6" />
-                </span>
-                <p className="mt-4 font-bold text-slate-800">Your estimate will appear here</p>
-                <p className="mt-2 max-w-sm text-sm leading-relaxed text-slate-500">
-                  Add your project details and floor area to see the estimated total, range, and cost breakdown.
-                </p>
-              </div>
+                        ))
+                        ) : (
+                    breakdown.map((item) => (
+                        <div key={item.label} className="flex items-start justify-between gap-4 py-3">
+                          <div>
+                            <p className="text-sm font-semibold text-slate-800">{item.label}</p>
+                            <p className="mt-0.5 text-xs text-slate-500">{item.detail}</p>
+                          </div>
+                          <p className="shrink-0 text-sm font-bold text-slate-900">{formatCurrency(item.value)}</p>
+                        </div>
+                        ))
+                  )}
+                      </div>
+                      <p className="mt-4 text-xs leading-relaxed text-slate-500">
+                        Benchmark: {estimate.benchmarkSource} ({estimate.benchmarkVersion}). This is a preliminary estimate; final pricing depends on plans, materials, site conditions, and contractor quotes.
+                      </p>
+                    </>
+                  ) : error ? (
+                  <div role="alert" className="flex min-h-[250px] items-center justify-center text-center text-sm font-medium leading-relaxed text-rose-700">
+                    {error}
+                  </div>
+                  ) : (
+                  <div className="flex min-h-[250px] flex-col items-center justify-center text-center">
+                    <span className="flex h-12 w-12 items-center justify-center rounded-full bg-emerald-50 text-[#136F48]">
+                      <Calculator className="h-6 w-6" />
+                    </span>
+                    <p className="mt-4 font-bold text-slate-800">Your estimate will appear here</p>
+                    <p className="mt-2 max-w-sm text-sm leading-relaxed text-slate-500">
+                      Add your project details and floor area to see the estimated total, range, and cost breakdown.
+                    </p>
+                  </div>
             )}
-          </div>
-        </div>
+                </div>
+              </div>
 
-        <p className="mt-6 text-xs leading-relaxed text-slate-500">
-          Note: This is only an estimate based on active construction benchmarks or, when a matching rate is unavailable, the built-in baseline catalog. It is not a contractor quote or final project cost.
-        </p>
-      </div>
-    </section>
-  );
+            <p className="mt-6 text-xs leading-relaxed text-slate-500">
+              Note: This is only an estimate based on active construction benchmarks or, when a matching rate is unavailable, the built-in baseline catalog. It is not a contractor quote or final project cost.
+            </p>
+          </div>
+        </section>
+        );
 }
 
-const workTypeOptions: { value: WorkType; label: string }[] = [
-  { value: 'new_build', label: 'New build' },
-  { value: 'renovation', label: 'Renovation' },
-  { value: 'extension', label: 'Extension' },
-];
+        const workTypeOptions: {value: WorkType; label: string }[] = [
+        {value: 'new_build', label: 'New build' },
+        {value: 'renovation', label: 'Renovation' },
+        {value: 'extension', label: 'Extension' },
+        ];

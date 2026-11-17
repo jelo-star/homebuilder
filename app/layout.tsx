@@ -13,11 +13,11 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "HomeBuildr — Find Trusted Home Contractors Near You",
-  description: "Discover verified contractors, compare portfolios, track construction milestones and manage payments with HomeBuildr.",
+  title: "Gawa-Yad — Gawang Tapat, Gawang Bayad",
+  description: "Gawang tapat, gawang bayad. Discover verified contractors, compare portfolios, track construction milestones and manage payments with Gawa-Yad.",
   icons: {
-    icon: "/homebuilder-icon.png",
-    apple: "/homebuilder-icon.png",
+    icon: "/gawa-yad-icon.png",
+    apple: "/gawa-yad-icon.png",
   },
 };
 

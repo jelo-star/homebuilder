@@ -399,7 +399,7 @@ function ContractorPublicProfileContent() {
                     <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-emerald-50 text-emerald-700"><ShieldCheck className="h-6 w-6" /></span>
                     <div>
                       <h2 className="font-extrabold text-slate-900">Verified Contractor</h2>
-                      <p className="mt-1 text-sm leading-relaxed text-slate-500">All credentials are vetted, licensed and reviewed by HomeBuildr.</p>
+                      <p className="mt-1 text-sm leading-relaxed text-slate-500">All credentials are vetted, licensed and reviewed by Gawa-Yad.</p>
                     </div>
                   </div>
                   <p className="mt-3 text-[10px] font-bold uppercase tracking-wide text-emerald-700">Verified licenses</p>

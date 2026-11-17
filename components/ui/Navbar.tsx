@@ -150,7 +150,7 @@ export default function Navbar({ userRole, userName, unreadCount = 0 }: NavbarPr
         <div className="flex h-14 justify-between">
           <div className="flex items-center">
             <Link href="/" className="flex items-center gap-2.5 group">
-              <BrandLogo className="h-[42px] w-[170px] transition-transform group-hover:scale-105" />
+              <BrandLogo className="transition-transform group-hover:scale-105" />
             </Link>
 
             {/* Desktop Navigation */}

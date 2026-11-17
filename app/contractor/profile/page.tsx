@@ -485,7 +485,7 @@ export default function ContractorProfilePage() {
               <div>
                 <p className="text-xs font-bold text-slate-900">Profile cover image</p>
                 <div className="relative mt-2 h-40 overflow-hidden rounded-xl border border-slate-200 bg-slate-100 sm:h-44">
-                  {coverImagePreview ? <img src={coverImagePreview} alt="Cover preview" className="h-full w-full object-cover" style={{ objectPosition: coverImagePosition }} /> : <div className="flex h-full items-center justify-center text-xs text-slate-400">Default HomeBuildr cover</div>}
+                  {coverImagePreview ? <img src={coverImagePreview} alt="Cover preview" className="h-full w-full object-cover" style={{ objectPosition: coverImagePosition }} /> : <div className="flex h-full items-center justify-center text-xs text-slate-400">Default Gawa-Yad cover</div>}
                   <label className="absolute bottom-2 right-2 inline-flex cursor-pointer items-center gap-2 rounded-lg bg-white/95 px-3 py-2 text-xs font-bold text-slate-700 shadow-sm hover:bg-white">
                     <Upload className="h-3.5 w-3.5" /> Replace cover
                     <input type="file" accept="image/jpeg,image/png,image/webp" className="sr-only" onChange={event => void handleCoverImageChange(event.target.files?.[0])} />

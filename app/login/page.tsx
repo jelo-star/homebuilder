@@ -172,7 +172,7 @@ export default function LoginPage() {
               </div>
               <h2 className="text-3xl font-extrabold tracking-tight text-slate-950">Sign in</h2>
               <p className="mt-2 text-sm leading-6 text-slate-600">
-                Access your HomeBuildr account and continue where you left off.
+                Access your Gawa-Yad account and continue where you left off.
               </p>
             </div>
 
@@ -234,7 +234,7 @@ export default function LoginPage() {
             </form>
 
             <div className="mt-7 border-t border-slate-100 pt-6 text-center text-sm text-slate-600">
-              New to HomeBuildr?{' '}
+              New to Gawa-Yad?{' '}
               <Link href="/register" className="font-bold text-emerald-700 hover:text-emerald-800">
                 Create an account
               </Link>

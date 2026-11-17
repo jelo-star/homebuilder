@@ -84,7 +84,7 @@ export function exportProjectToExcel(data: ProjectExportData) {
 
   // 1. Worksheet 1: Project Overview & Financials
   const overviewRows = [
-    ['HOMEBUILDR - OFFICIAL ACTIVE PROJECT REPORT'],
+    ['GAWA-YAD - OFFICIAL ACTIVE PROJECT REPORT'],
     ['Generated On', new Date().toLocaleString()],
     [''],
     ['PROJECT DETAILS', ''],

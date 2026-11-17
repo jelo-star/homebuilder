@@ -385,7 +385,7 @@ function ContractorPortfolioContent() {
         <div className="flex flex-col gap-1 px-1 sm:flex-row sm:items-end sm:justify-between">
           <div>
             <h2 className="text-lg font-bold text-slate-900">Completed Builds &amp; Projects</h2>
-            <p className="mt-1 text-xs text-slate-500">Completed HomeBuildr projects and your showcased past builds appear together here.</p>
+            <p className="mt-1 text-xs text-slate-500">Completed Gawa-Yad projects and your showcased past builds appear together here.</p>
           </div>
           <span className="text-xs font-semibold text-slate-400">
             {portfolioGalleryItems.length} completed {portfolioGalleryItems.length === 1 ? 'project' : 'projects'}
@@ -435,7 +435,7 @@ function ContractorPortfolioContent() {
                           </div>
                         )}
                         <span className="absolute right-3 top-3 inline-flex items-center gap-1 rounded-full bg-emerald-50/95 px-2.5 py-1 text-[10px] font-bold text-emerald-700 shadow-sm backdrop-blur">
-                          <CheckCircle2 className="h-3 w-3" /> HomeBuildr Project
+                          <CheckCircle2 className="h-3 w-3" /> Gawa-Yad Project
                         </span>
                       </div>
                       <div className="space-y-3 p-5">
